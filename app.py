@@ -590,7 +590,7 @@ HTML_TEMPLATE = '''
         const typingIndicator = document.getElementById('typingIndicator');
         const statusBar = document.getElementById('statusBar');
         
-        let useSSE = true; // Use Server-Sent Events for streaming
+        let useSSE = false; // Use HTTP endpoint (SSE has issues, will fix later)
         
         // Check system health on load
         checkHealth();
