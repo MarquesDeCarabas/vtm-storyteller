@@ -153,3 +153,195 @@ All endpoints have been tested and verified:
 - ✅ Streaming responses
 - ✅ Character management
 
+
+## 🎭 Hybrid Character System (Latest Feature)
+
+### Overview
+The VTM Storyteller now includes a comprehensive hybrid character management system that gives you two powerful options:
+
+#### Option 1: Demiplane Integration 🔗
+- **Link existing Demiplane characters** to the Storyteller
+- Access professional, official VTM 5e character sheets
+- Automatic Roll20 integration (via Demiplane)
+- Perfect for serious campaigns and experienced players
+
+#### Option 2: Custom Character Creation ✨
+- **Built-in character creation wizard** with step-by-step guidance
+- Interactive character sheets with all VTM 5e mechanics
+- Quick character generation for one-shots or casual games
+- No external account required
+
+### Features
+
+#### 🎲 Advanced Dice Roller
+- Full VTM 5e dice mechanics with d10 pools
+- **Hunger dice system** (red dice representing the Beast)
+- Automatic success calculation (6+ = success)
+- **Critical wins**: Pairs of 10s (4 successes per pair)
+- **Messy criticals**: Criticals with Hunger dice showing 10
+- **Bestial failures**: Zero successes with Hunger 1s
+- Visual dice display with color coding
+
+#### 👤 Character Management
+- Create and store multiple characters
+- Track **Health**, **Willpower**, **Humanity**, and **Hunger**
+- Manage **Attributes** (Physical, Social, Mental)
+- Manage **Skills** (27 skills across 3 categories)
+- Manage **Disciplines** (clan-specific vampire powers)
+- Character progression and experience tracking
+
+#### 🤖 Character-Aware Storyteller
+When you have a linked or created character, the AI automatically:
+- References your character's clan and abilities
+- Suggests appropriate actions based on your Disciplines
+- Tracks your current Hunger and Humanity
+- Provides contextual guidance for your character type
+
+### Supported Clans
+
+| Clan | Disciplines |
+|------|-------------|
+| **Brujah** | Celerity, Potence, Presence |
+| **Gangrel** | Animalism, Fortitude, Protean |
+| **Malkavian** | Auspex, Dominate, Obfuscate |
+| **Nosferatu** | Animalism, Obfuscate, Potence |
+| **Toreador** | Auspex, Celerity, Presence |
+| **Tremere** | Auspex, Blood Sorcery, Dominate |
+| **Ventrue** | Dominate, Fortitude, Presence |
+| **Caitiff** | Choose any 3 disciplines |
+| **Thin-Blood** | Thin-Blood Alchemy |
+
+### How to Use
+
+#### Link a Demiplane Character
+1. Navigate to the **Character** tab
+2. Click "Link Demiplane Character"
+3. Enter your character sheet URL from Demiplane
+4. Fill in character name, clan, and predator type
+5. Click "Save Link"
+6. Your character is now accessible to the Storyteller!
+
+#### Create a Custom Character
+1. Navigate to the **Character** tab
+2. Click "Create Custom Character"
+3. Follow the 5-step wizard:
+   - **Step 1**: Basic Information (Name, Concept, Chronicle)
+   - **Step 2**: Choose Your Clan (9 clans available)
+   - **Step 3**: Distribute Attributes (7 dots per category)
+   - **Step 4**: Distribute Skills (13 total dots)
+   - **Step 5**: Choose Disciplines (2 dots from clan options)
+4. Click "Create Character"
+5. View your character in the **Character Sheet** tab
+
+#### Roll Dice
+1. Navigate to the **Dice Roller** tab
+2. Set your **pool size** (Attribute + Skill + modifiers)
+3. Set **hunger dice** (0-5, representing your current Hunger)
+4. Set **difficulty** (target number of successes)
+5. Click "ROLL"
+6. View detailed results with automatic interpretation
+
+### API Endpoints (New)
+
+#### Character Management
+```
+POST /character/link        - Link Demiplane character
+POST /character/create      - Create custom character
+GET  /character/<id>        - Get character details
+PUT  /character/<id>        - Update character stats
+```
+
+#### Dice Rolling
+```
+POST /roll                  - Roll VTM 5e dice pool
+  Parameters:
+    - pool: int (total dice to roll)
+    - hunger: int (hunger dice, 0-5)
+    - user_id: string
+    - character_id: int (optional)
+    - context: string (optional)
+  
+  Returns:
+    - normal_dice: array of results
+    - hunger_dice: array of results
+    - successes: int
+    - critical: boolean
+    - messy_critical: boolean
+    - bestial_failure: boolean
+```
+
+### Database Schema (New Tables)
+
+```sql
+-- Demiplane character links
+CREATE TABLE demiplane_links (
+    id INTEGER PRIMARY KEY,
+    user_id TEXT,
+    character_id TEXT,
+    demiplane_url TEXT,
+    character_name TEXT,
+    clan TEXT,
+    predator_type TEXT,
+    created_at TIMESTAMP,
+    updated_at TIMESTAMP
+);
+
+-- Custom character sheets
+CREATE TABLE character_sheets (
+    id INTEGER PRIMARY KEY,
+    user_id TEXT,
+    name TEXT,
+    clan TEXT,
+    predator_type TEXT,
+    generation INTEGER,
+    attributes JSON,
+    skills JSON,
+    disciplines JSON,
+    health INTEGER,
+    willpower INTEGER,
+    humanity INTEGER,
+    hunger INTEGER,
+    blood_potency INTEGER,
+    experience INTEGER,
+    created_at TIMESTAMP,
+    updated_at TIMESTAMP
+);
+
+-- Dice roll history
+CREATE TABLE dice_rolls (
+    id INTEGER PRIMARY KEY,
+    user_id TEXT,
+    character_id INTEGER,
+    pool_size INTEGER,
+    hunger_dice INTEGER,
+    results JSON,
+    successes INTEGER,
+    critical BOOLEAN,
+    messy_critical BOOLEAN,
+    bestial_failure BOOLEAN,
+    context TEXT,
+    timestamp TIMESTAMP
+);
+```
+
+### Technical Implementation
+
+- **Frontend**: Vanilla JavaScript with modern ES6+ features
+- **Backend**: Flask with SQLite database
+- **AI Integration**: Character context automatically injected into prompts
+- **Responsive Design**: Works on desktop, tablet, and mobile
+- **Gothic Theme**: Dark red/black color scheme matching VTM aesthetic
+
+### Benefits of Hybrid Approach
+
+1. **Flexibility**: Choose the system that fits your playstyle
+2. **No Vendor Lock-in**: Works with or without Demiplane
+3. **Best of Both Worlds**: Professional sheets OR quick creation
+4. **Seamless Integration**: Both options work identically with the AI
+5. **Future-Proof**: Easy to add more integrations (Roll20, D&D Beyond, etc.)
+
+---
+
+**System Status**: ✅ Fully Operational
+**Last Updated**: October 17, 2025
+**Version**: 2.0 (Hybrid Character System)
