@@ -15,10 +15,37 @@ app = Flask(__name__)
 
 # OpenAI Configuration
 API_KEY = os.getenv("OPENAI_API_KEY")
-ASSISTANT_ID = os.getenv("ASSISTANT_ID")
-VECTOR_STORE_ID = os.getenv("VECTOR_STORE_ID")
 
 client = OpenAI(api_key=API_KEY)
+
+# VTM Storyteller System Prompt
+STORYTELLER_PROMPT = """You are an expert Storyteller for Vampire: The Masquerade 5th Edition (VTM 5e).
+
+Your role is to:
+- Guide players through immersive chronicles in the World of Darkness
+- Help create compelling vampire characters following VTM 5e rules
+- Narrate atmospheric scenes with gothic-punk aesthetics
+- Adjudicate rules fairly while prioritizing narrative flow
+- Roleplay NPCs with distinct personalities
+- Track Hunger, Humanity, and other key mechanics
+- Create moral dilemmas that challenge the Beast within
+
+Guidelines:
+- Use evocative, sensory descriptions
+- Maintain the dark, mature tone of VTM
+- Reference the 13 Clans, Disciplines, and Camarilla/Anarch politics
+- Encourage player agency and meaningful choices
+- Balance horror, politics, and personal drama
+
+When creating characters, follow VTM 5e character creation rules including:
+- Concept, Predator Type, Clan, Attributes (7/5/3), Skills (13/9/5)
+- Disciplines, Advantages (Backgrounds, Merits, Flaws)
+- Humanity, Tenets, Touchstones, and Convictions
+"""
+
+# Conversation history storage (in-memory for now)
+conversation_histories = {}
+
 
 # Database initialization
 def init_db():
@@ -70,43 +97,13 @@ def log_system_event(level, message, details=None):
     conn.close()
     logger.info(f"{level}: {message}")
 
-def get_or_create_thread(user_id="default"):
-    """Get or create a conversation thread"""
-    try:
-        thread = client.beta.threads.create()
-        log_system_event("INFO", f"Created new thread: {thread.id}")
-        return thread.id
-    except Exception as e:
-        log_system_event("ERROR", "Failed to create thread", {"error": str(e)})
-        raise
-
-def wait_for_run_completion(thread_id, run_id, max_iterations=90):
-    """Wait for the assistant run to complete with progress logging"""
-    for i in range(max_iterations):
-        try:
-            run = client.beta.threads.runs.retrieve(thread_id=thread_id, run_id=run_id)
-            
-            # Log progress every 10 seconds
-            if i % 10 == 0 and i > 0:
-                log_system_event("INFO", f"Waiting for response... {i} seconds elapsed", 
-                               {"thread_id": thread_id, "run_id": run_id, "status": run.status})
-            
-            if run.status == "completed":
-                log_system_event("INFO", "Assistant response completed", 
-                               {"thread_id": thread_id, "elapsed_time": i})
-                return run
-            elif run.status in ["failed", "cancelled", "expired"]:
-                log_system_event("ERROR", f"Run {run.status}", 
-                               {"thread_id": thread_id, "run_id": run_id, "status": run.status})
-                return None
-            
-            time.sleep(1)
-        except Exception as e:
-            log_system_event("ERROR", "Error checking run status", {"error": str(e)})
-            raise
-    
-    log_system_event("WARNING", "Response timeout", {"thread_id": thread_id, "timeout": max_iterations})
-    return None
+def get_conversation_history(user_id="default"):
+    """Get or create conversation history for a user"""
+    if user_id not in conversation_histories:
+        conversation_histories[user_id] = [
+            {"role": "system", "content": STORYTELLER_PROMPT}
+        ]
+    return conversation_histories[user_id]
 
 # Routes
 
@@ -117,42 +114,39 @@ def home():
 
 @app.route('/chat', methods=['POST'])
 def chat():
-    """Handle chat messages with SSE support"""
+    """Handle chat messages using Chat Completions API"""
     try:
         user_message = request.json.get('message', '')
+        user_id = request.json.get('user_id', 'default')
         
         if not user_message:
             return jsonify({"error": "No message provided"}), 400
         
         log_system_event("INFO", "Received chat message", {"message": user_message[:100]})
         
-        # Create thread and send message
-        thread_id = get_or_create_thread()
+        # Get conversation history
+        history = get_conversation_history(user_id)
         
-        client.beta.threads.messages.create(
-            thread_id=thread_id,
-            role="user",
-            content=user_message
+        # Add user message to history
+        history.append({"role": "user", "content": user_message})
+        
+        # Get response from OpenAI
+        response = client.chat.completions.create(
+            model="gpt-4-turbo-preview",
+            messages=history,
+            temperature=0.8,
+            max_tokens=1000
         )
         
-        # Run the assistant
-        run = client.beta.threads.runs.create(
-            thread_id=thread_id,
-            assistant_id=ASSISTANT_ID
-        )
+        assistant_message = response.choices[0].message.content
         
-        # Wait for completion
-        completed_run = wait_for_run_completion(thread_id, run.id)
+        # Add assistant response to history
+        history.append({"role": "assistant", "content": assistant_message})
         
-        if not completed_run:
-            log_system_event("ERROR", "Assistant run failed or timed out")
-            return jsonify({
-                "error": "The Storyteller is taking too long to respond. Please try again with a simpler question."
-            }), 504
-        
-        # Get the response
-        messages = client.beta.threads.messages.list(thread_id=thread_id)
-        assistant_message = messages.data[0].content[0].text.value
+        # Keep only last 20 messages to avoid token limits
+        if len(history) > 21:  # 1 system + 20 messages
+            history = [history[0]] + history[-20:]
+            conversation_histories[user_id] = history
         
         log_system_event("INFO", "Chat response sent", {"response_length": len(assistant_message)})
         
@@ -164,10 +158,11 @@ def chat():
 
 @app.route('/chat/stream', methods=['POST'])
 def chat_stream():
-    """Stream chat responses using Server-Sent Events"""
+    """Stream chat responses using Server-Sent Events with Chat Completions"""
     def generate():
         try:
             user_message = request.json.get('message', '')
+            user_id = request.json.get('user_id', 'default')
             
             if not user_message:
                 yield f"data: {json.dumps({'error': 'No message provided'})}\n\n"
@@ -176,49 +171,35 @@ def chat_stream():
             # Send typing indicator
             yield f"data: {json.dumps({'type': 'typing', 'message': 'Storyteller is thinking...'})}\n\n"
             
-            # Create thread and send message
-            thread_id = get_or_create_thread()
+            # Get conversation history
+            history = get_conversation_history(user_id)
+            history.append({"role": "user", "content": user_message})
             
-            client.beta.threads.messages.create(
-                thread_id=thread_id,
-                role="user",
-                content=user_message
+            # Get streaming response from OpenAI
+            stream = client.chat.completions.create(
+                model="gpt-4-turbo-preview",
+                messages=history,
+                temperature=0.8,
+                max_tokens=1000,
+                stream=True
             )
             
-            # Run the assistant with streaming
-            run = client.beta.threads.runs.create(
-                thread_id=thread_id,
-                assistant_id=ASSISTANT_ID
-            )
+            full_response = ""
+            for chunk in stream:
+                if chunk.choices[0].delta.content:
+                    content = chunk.choices[0].delta.content
+                    full_response += content
+                    yield f"data: {json.dumps({'type': 'chunk', 'content': content})}\n\n"
             
-            # Poll for completion and stream progress
-            for i in range(90):
-                run_status = client.beta.threads.runs.retrieve(thread_id=thread_id, run_id=run.id)
-                
-                if i % 5 == 0:
-                    yield f"data: {json.dumps({'type': 'progress', 'seconds': i})}\n\n"
-                
-                if run_status.status == "completed":
-                    messages = client.beta.threads.messages.list(thread_id=thread_id)
-                    assistant_message = messages.data[0].content[0].text.value
-                    
-                    # Stream the response in chunks
-                    words = assistant_message.split()
-                    for j in range(0, len(words), 5):
-                        chunk = ' '.join(words[j:j+5])
-                        yield f"data: {json.dumps({'type': 'chunk', 'content': chunk + ' '})}\n\n"
-                        time.sleep(0.1)
-                    
-                    yield f"data: {json.dumps({'type': 'done'})}\n\n"
-                    return
-                
-                elif run_status.status in ["failed", "cancelled", "expired"]:
-                    yield f"data: {json.dumps({'type': 'error', 'message': 'Assistant run failed'})}\n\n"
-                    return
-                
-                time.sleep(1)
+            # Add assistant response to history
+            history.append({"role": "assistant", "content": full_response})
             
-            yield f"data: {json.dumps({'type': 'error', 'message': 'Response timeout'})}\n\n"
+            # Keep only last 20 messages
+            if len(history) > 21:
+                history = [history[0]] + history[-20:]
+                conversation_histories[user_id] = history
+            
+            yield f"data: {json.dumps({'type': 'done'})}\n\n"
             
         except Exception as e:
             yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
@@ -322,7 +303,6 @@ def health_check():
             "components": {
                 "database": "healthy",
                 "openai_api": openai_status,
-                "assistant": "configured" if ASSISTANT_ID else "not_configured"
             },
             "metrics": {
                 "total_logs": log_count,

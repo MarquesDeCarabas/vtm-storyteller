@@ -126,3 +126,30 @@ Built with:
 
 This project is for personal use and educational purposes.
 
+
+## 🔄 Latest Update (Oct 17, 2025)
+
+**Migrated to Chat Completions API**
+
+The application has been updated to use OpenAI's Chat Completions API instead of the deprecated Assistants API. This provides:
+
+- ✅ Better stability and reliability
+- ✅ Faster response times
+- ✅ Improved conversation context management
+- ✅ Full streaming support
+- ✅ Future-proof implementation
+
+### Changes Made:
+- Removed dependency on `ASSISTANT_ID` and `VECTOR_STORE_ID`
+- Implemented in-memory conversation history management
+- Updated both `/chat` and `/chat/stream` endpoints
+- Added comprehensive VTM 5e system prompt
+- Improved error handling and logging
+
+### Testing:
+All endpoints have been tested and verified:
+- ✅ Health monitoring
+- ✅ Chat functionality
+- ✅ Streaming responses
+- ✅ Character management
+
