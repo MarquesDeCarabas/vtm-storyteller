@@ -201,6 +201,7 @@ def init_db():
                   faction TEXT,
                   status TEXT DEFAULT 'active',
                   current_session INTEGER DEFAULT 0,
+                  total_sessions INTEGER DEFAULT 0,
                   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
     
