@@ -165,26 +165,43 @@ class VTMCharacterParser:
             pdf_reader = PyPDF2.PdfReader(file)
             
             # Check if PDF has form fields
-            if '/AcroForm' not in pdf_reader.trailer.get('/Root', {}):
-                print("PDF does not contain fillable form fields")
+            try:
+                if not hasattr(pdf_reader, 'get_fields'):
+                    print("PDF reader does not support form field extraction")
+                    return
+                    
+                fields = pdf_reader.get_fields()
+                if not fields or not isinstance(fields, dict):
+                    print("No form fields found or invalid format")
+                    return
+            except Exception as e:
+                print(f"Cannot access form fields: {e}")
                 return
             
-            # Get form fields
-            fields = pdf_reader.get_fields()
-            if not fields:
-                print("No form fields found")
-                return
+            # Helper function to safely get field value
+            def get_field_value(field_name):
+                try:
+                    field = fields.get(field_name, {})
+                    if isinstance(field, dict):
+                        value = field.get('/V', '')
+                        # Handle indirect objects
+                        if hasattr(value, 'get_object'):
+                            value = value.get_object()
+                        return str(value) if value else ''
+                    return ''
+                except:
+                    return ''
             
             # Extract basic info
-            self.data['name'] = fields.get('Name', {}).get('/V', '')
-            self.data['player'] = fields.get('Player', {}).get('/V', '')
-            self.data['chronicle'] = fields.get('Chronicle', {}).get('/V', '')
-            self.data['clan'] = fields.get('Clan', {}).get('/V', '')
-            self.data['predator_type'] = fields.get('Predator type', {}).get('/V', '')
-            self.data['ambition'] = fields.get('Ambition', {}).get('/V', '')
-            self.data['desire'] = fields.get('Desire', {}).get('/V', '')
-            self.data['sect'] = fields.get('Sect', {}).get('/V', '')
-            self.data['rank_title'] = fields.get('Rank/Title', {}).get('/V', '')
+            self.data['name'] = get_field_value('Name')
+            self.data['player'] = get_field_value('Player')
+            self.data['chronicle'] = get_field_value('Chronicle')
+            self.data['clan'] = get_field_value('Clan')
+            self.data['predator_type'] = get_field_value('Predator type')
+            self.data['ambition'] = get_field_value('Ambition')
+            self.data['desire'] = get_field_value('Desire')
+            self.data['sect'] = get_field_value('Sect')
+            self.data['rank_title'] = get_field_value('Rank/Title')
             
             # Extract attributes (look for checkbox patterns)
             for category, attrs in self.ATTRIBUTES.items():

@@ -56,7 +56,6 @@ class PDFUploadHandler:
             ('desire', 'TEXT'),
             ('sect', 'TEXT'),
             ('rank_title', 'TEXT'),
-            ('player', 'TEXT'),
             ('campaign_id', 'INTEGER')
         ]
         
@@ -181,7 +180,7 @@ class PDFUploadHandler:
         # Insert character
         c.execute('''
             INSERT INTO characters (
-                name, player, campaign_id, clan, concept,
+                name, campaign_id, clan, concept,
                 attributes, skills, disciplines, backgrounds,
                 health_max, willpower_max, humanity, hunger, resonance,
                 blood_potency, generation,
@@ -192,7 +191,6 @@ class PDFUploadHandler:
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (
             character_data['name'],
-            character_data['player'],
             chronicle_id,
             character_data['clan'],
             character_data['predator_type'],  # Using predator_type as concept
@@ -254,7 +252,6 @@ class PDFUploadHandler:
         # Update character
         c.execute('''
             UPDATE characters SET
-                player = ?,
                 clan = ?,
                 concept = ?,
                 attributes = ?,
@@ -284,7 +281,6 @@ class PDFUploadHandler:
                 pdf_hash = ?
             WHERE id = ?
         ''', (
-            character_data['player'],
             character_data['clan'],
             character_data['predator_type'],
             attributes_json,
