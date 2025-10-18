@@ -19,6 +19,65 @@ import requests
 from werkzeug.utils import secure_filename
 import base64
 
+
+# ElevenLabs TTS Integration
+import io
+
+
+# ElevenLabs configuration
+ELEVENLABS_API_KEY = os.getenv('ELEVENLABS_API_KEY', '')
+ELEVENLABS_API_URL = "https://api.elevenlabs.io/v1/text-to-speech"
+
+# Voice IDs for different languages
+VOICES = {
+    'en': {
+        'voice_id': 'EXAVITQu4vr4xnSDxMaL',  # Serafina - Sensual female voice
+        'name': 'Serafina',
+        'description': 'Deep, sensual female voice perfect for VTM storytelling'
+    },
+    'es': {
+        'voice_id': '21m00Tcm4TlvDq8ikWAM',  # Rachel - Can speak Spanish
+        'name': 'Rachel',
+        'description': 'Warm, expressive female voice for Spanish narration'
+    }
+}
+
+def generate_speech(text, language='en', voice_settings=None):
+    if not ELEVENLABS_API_KEY:
+        raise ValueError("ELEVENLABS_API_KEY not configured")
+    
+    voice = VOICES.get(language, VOICES['en'])
+    voice_id = voice['voice_id']
+    
+    url = f"{ELEVENLABS_API_URL}/{voice_id}"
+    
+    headers = {
+        "Accept": "audio/mpeg",
+        "Content-Type": "application/json",
+        "xi-api-key": ELEVENLABS_API_KEY
+    }
+    
+    if voice_settings is None:
+        voice_settings = {
+            "stability": 0.5,
+            "similarity_boost": 0.75,
+            "style": 0.5,
+            "use_speaker_boost": True
+        }
+    
+    data = {
+        "text": text,
+        "model_id": "eleven_multilingual_v2",
+        "voice_settings": voice_settings
+    }
+    
+    response = requests.post(url, json=data, headers=headers)
+    
+    if response.status_code != 200:
+        raise Exception(f"ElevenLabs API error: {response.status_code}")
+    
+    return response.content
+
 app = Flask(__name__)
 app.secret_key = secrets.token_hex(32)
 
@@ -1411,6 +1470,36 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         ::-webkit-scrollbar-thumb:hover {
             background: #a00000;
         }
+        
+        /* Voice Toggle Button */
+        .voice-toggle {
+            padding: 12px 18px;
+            background: #2a0505;
+            border: 2px solid #8b0000;
+            color: #e0e0e0;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-size: 1.5em;
+            border-radius: 5px;
+            margin-right: 10px;
+        }
+        
+        .voice-toggle:hover {
+            background: #3d0808;
+            border-color: #ff0000;
+            transform: scale(1.05);
+        }
+        
+        .voice-toggle.active {
+            background: #8b0000;
+            border-color: #ff0000;
+            box-shadow: 0 0 20px rgba(139, 0, 0, 0.5);
+        }
+        
+        .voice-toggle.muted {
+            opacity: 0.5;
+            background: #1a0505;
+        }
     </style>
 </head>
 <body>
@@ -1446,6 +1535,9 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                     Storyteller is writing...
                 </div>
                 <div class="input-area">
+                    <button onclick="toggleVoice()" id="voice-toggle-btn" class="voice-toggle" title="Toggle voice narration">
+                        🔊
+                    </button>
                     <input type="text" id="message-input" placeholder="Speak to the Storyteller..." onkeypress="handleKeyPress(event)">
                     <button onclick="sendMessage()" id="send-btn">Send</button>
                 </div>
@@ -1602,6 +1694,72 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         // Global state
         let currentCharacter = null;
         let userId = 'user_' + Math.random().toString(36).substr(2, 9);
+        let voiceEnabled = false;
+        let currentAudio = null;
+        
+        // Voice narration functions
+        function toggleVoice() {
+            voiceEnabled = !voiceEnabled;
+            const btn = document.getElementById('voice-toggle-btn');
+            
+            if (voiceEnabled) {
+                btn.classList.add('active');
+                btn.classList.remove('muted');
+                btn.textContent = '🔊';
+                btn.title = 'Voice narration ON - Click to disable';
+            } else {
+                btn.classList.remove('active');
+                btn.classList.add('muted');
+                btn.textContent = '🔇';
+                btn.title = 'Voice narration OFF - Click to enable';
+                
+                // Stop any currently playing audio
+                if (currentAudio) {
+                    currentAudio.pause();
+                    currentAudio = null;
+                }
+            }
+        }
+        
+        async function playVoiceNarration(text, language = 'en') {
+            if (!voiceEnabled) return;
+            
+            try {
+                // Stop any currently playing audio
+                if (currentAudio) {
+                    currentAudio.pause();
+                }
+                
+                // Request TTS from server
+                const response = await fetch('/tts', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text, language })
+                });
+                
+                if (!response.ok) {
+                    console.error('TTS error:', response.statusText);
+                    return;
+                }
+                
+                // Get audio blob
+                const audioBlob = await response.blob();
+                const audioUrl = URL.createObjectURL(audioBlob);
+                
+                // Play audio
+                currentAudio = new Audio(audioUrl);
+                currentAudio.play();
+                
+                // Clean up URL when audio finishes
+                currentAudio.onended = () => {
+                    URL.revokeObjectURL(audioUrl);
+                    currentAudio = null;
+                };
+                
+            } catch (error) {
+                console.error('Voice narration error:', error);
+            }
+        }
         
         // VTM 5e Data
         const clans = [
@@ -1673,6 +1831,8 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                     addMessage('assistant', 'Error: ' + data.error);
                 } else {
                     addMessage('assistant', data.response);
+                    // Play voice narration if enabled
+                    playVoiceNarration(data.response, 'en');
                 }
             } catch (error) {
                 addMessage('assistant', 'Error: Connection lost. Please try again.');
@@ -2181,6 +2341,37 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 </html>
 
 """
+
+
+@app.route('/tts', methods=['POST'])
+def text_to_speech():
+    try:
+        data = request.get_json()
+        text = data.get('text', '')
+        language = data.get('language', 'en')
+        
+        if not text:
+            return jsonify({'error': 'No text provided'}), 400
+        
+        if language not in VOICES:
+            return jsonify({'error': f'Unsupported language: {language}'}), 400
+        
+        audio_data = generate_speech(text, language)
+        
+        return send_file(
+            io.BytesIO(audio_data),
+            mimetype='audio/mpeg',
+            as_attachment=False,
+            download_name='storyteller.mp3'
+        )
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/tts/voices', methods=['GET'])
+def get_voices():
+    return jsonify(VOICES)
+
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=8080, debug=False)
