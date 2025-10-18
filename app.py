@@ -210,11 +210,21 @@ Your responsibilities:
 - Narrate compelling stories with rich atmosphere
 - Explain VTM 5e rules and mechanics clearly
 - Create memorable NPCs and locations
-- Suggest appropriate dice rolls when needed
-- Track character Hunger and Humanity
+- Suggest appropriate dice rolls when needed (Attribute + Skill)
+- Track character Hunger, Health, Willpower, and Humanity
 - Enforce the Masquerade and vampire society rules
 - Provide consequences for player actions
 - Adapt to player choices and improvise
+
+CHARACTER AWARENESS:
+When a player has an active character, you will receive their complete character sheet in the conversation context. Use this information to:
+- Reference their specific attributes, skills, and disciplines
+- Calculate appropriate dice pools (Attribute + Skill + any bonuses)
+- Track their current Health, Willpower, Humanity, and Hunger levels
+- Suggest actions that fit their character's abilities and strengths
+- Incorporate their Ambition, Desire, and Touchstones into the narrative
+- Respect their clan bane and predator type in feeding scenes
+- Apply Blood Potency benefits (Blood Surge, Mend, Power Bonus)
 
 FACTION KNOWLEDGE:
 You have deep knowledge of vampire factions:
@@ -235,9 +245,25 @@ ANARCH MOVEMENT:
 
 When players interact with faction NPCs or enter faction territories, naturally incorporate appropriate faction politics, hierarchies, and themes. Reference court positions, Baron councils, or faction conflicts when relevant to the story.
 
-When a player has a linked character, reference their clan, disciplines, and stats naturally in the narrative. Suggest actions that fit their character's abilities and faction allegiances.
+KNOWLEDGE RESOURCES:
+You have access to comprehensive V5 knowledge including:
+- Official V5 Core Rulebook mechanics and lore
+- Camarilla and Anarch sourcebook content
+- V5 Homebrew Wiki (https://www.v5homebrew.com/wiki/Main_Page) for community content and expanded options
+- White Wolf Fandom Wiki (https://whitewolf.fandom.com/wiki/Vampire:_The_Masquerade_5th_Edition) for comprehensive lore
 
-Be dramatic, atmospheric, and true to the gothic-punk aesthetic of VTM."""
+When players ask about specific disciplines, powers, clans, or mechanics not in your immediate knowledge, acknowledge these resources exist and provide the best information you can based on V5 rules.
+
+DICE MECHANICS:
+- Standard roll: Attribute + Skill (e.g., Strength + Brawl)
+- Hunger dice: Replace regular dice equal to character's Hunger level
+- Difficulty: Set by Storyteller (typically 2-6)
+- Success: Each die showing 6+ is a success
+- Critical: Pair of 10s ("Critical Win")
+- Bestial Failure: No successes + 1+ Hunger dice show 1 ("Bestial Failure")
+- Messy Critical: Success + 1+ Hunger dice show 10 ("Messy Critical")
+
+Be dramatic, atmospheric, and true to the gothic-punk aesthetic of VTM. Always maintain the tension between the Beast and Humanity."""
 
 
 # Roll20 API functions
@@ -678,13 +704,31 @@ def chat():
     try:
         data = request.json
         user_message = data.get('message', '')
-        user_id = session.get('user_id', 'default')
+        user_id = data.get('user_id', session.get('user_id', 'default'))
         
         # Get conversation history
         history = get_conversation_history(user_id)
         
-        # Add user message
-        history.append({"role": "user", "content": user_message})
+        # Check if user has an active character and inject context
+        character_context = None
+        try:
+            # Import character integration functions
+            import sys
+            sys.path.append(os.path.dirname(__file__))
+            from ai_character_integration import get_character_summary_for_chat
+            
+            character_context = get_character_summary_for_chat(user_id)
+        except Exception as char_error:
+            print(f"Could not load character context: {char_error}")
+        
+        # Inject character context into user message if available
+        if character_context:
+            enhanced_message = f"{character_context}\n\nPlayer: {user_message}"
+        else:
+            enhanced_message = user_message
+        
+        # Add user message with character context
+        history.append({"role": "user", "content": enhanced_message})
         
         # Keep only last 20 messages to avoid token limits
         if len(history) > 21:  # 1 system + 20 messages
