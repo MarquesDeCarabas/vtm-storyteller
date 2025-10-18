@@ -272,6 +272,313 @@ def allowed_file(filename):
 def index():
     return render_template_string(HTML_TEMPLATE)
 
+# Add these routes after line 273 (after the index route)
+
+@app.route('/character', methods=['GET'])
+def list_characters():
+    """List all characters"""
+    try:
+        conn = sqlite3.connect('vtm_storyteller.db')
+        c = conn.cursor()
+        c.execute('SELECT * FROM characters')
+        characters = c.execute('''SELECT id, name, clan, concept, chronicle_id, 
+                                 generation, sire, predator_type, ambition, desire,
+                                 attributes, skills, disciplines, backgrounds,
+                                 health, willpower, humanity, hunger, experience,
+                                 created_at, updated_at 
+                                 FROM characters''').fetchall()
+        conn.close()
+        
+        result = []
+        for char in characters:
+            result.append({
+                'id': char[0],
+                'name': char[1],
+                'clan': char[2],
+                'concept': char[3],
+                'chronicle_id': char[4],
+                'generation': char[5],
+                'sire': char[6],
+                'predator_type': char[7],
+                'ambition': char[8],
+                'desire': char[9],
+                'attributes': json.loads(char[10]) if char[10] else {},
+                'skills': json.loads(char[11]) if char[11] else {},
+                'disciplines': json.loads(char[12]) if char[12] else {},
+                'backgrounds': json.loads(char[13]) if char[13] else {},
+                'health': char[14],
+                'willpower': char[15],
+                'humanity': char[16],
+                'hunger': char[17],
+                'experience': char[18],
+                'created_at': char[19],
+                'updated_at': char[20]
+            })
+        
+        return jsonify({'characters': result}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/character', methods=['POST'])
+def create_character():
+    """Create a new character"""
+    try:
+        data = request.json
+        
+        # Required fields
+        name = data.get('name')
+        clan = data.get('clan')
+        concept = data.get('concept', '')
+        
+        if not name or not clan:
+            return jsonify({'error': 'Name and clan are required'}), 400
+        
+        # Optional fields with defaults
+        chronicle_id = data.get('chronicle_id')
+        generation = data.get('generation', 13)
+        sire = data.get('sire', '')
+        predator_type = data.get('predator_type', '')
+        ambition = data.get('ambition', '')
+        desire = data.get('desire', '')
+        
+        # Stats
+        attributes = json.dumps(data.get('attributes', {
+            'strength': 1, 'dexterity': 1, 'stamina': 1,
+            'charisma': 1, 'manipulation': 1, 'composure': 1,
+            'intelligence': 1, 'wits': 1, 'resolve': 1
+        }))
+        skills = json.dumps(data.get('skills', {}))
+        disciplines = json.dumps(data.get('disciplines', {}))
+        backgrounds = json.dumps(data.get('backgrounds', {}))
+        
+        health = data.get('health', 3)
+        willpower = data.get('willpower', 2)
+        humanity = data.get('humanity', 7)
+        hunger = data.get('hunger', 1)
+        experience = data.get('experience', 0)
+        
+        conn = sqlite3.connect('vtm_storyteller.db')
+        c = conn.cursor()
+        c.execute('''INSERT INTO characters 
+                    (name, clan, concept, chronicle_id, generation, sire, predator_type,
+                     ambition, desire, attributes, skills, disciplines, backgrounds,
+                     health, willpower, humanity, hunger, experience)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+                 (name, clan, concept, chronicle_id, generation, sire, predator_type,
+                  ambition, desire, attributes, skills, disciplines, backgrounds,
+                  health, willpower, humanity, hunger, experience))
+        character_id = c.lastrowid
+        conn.commit()
+        conn.close()
+        
+        return jsonify({
+            'message': 'Character created successfully',
+            'character_id': character_id
+        }), 201
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/character/<int:character_id>', methods=['GET'])
+def get_character(character_id):
+    """Get a specific character"""
+    try:
+        conn = sqlite3.connect('vtm_storyteller.db')
+        c = conn.cursor()
+        char = c.execute('''SELECT id, name, clan, concept, chronicle_id, 
+                           generation, sire, predator_type, ambition, desire,
+                           attributes, skills, disciplines, backgrounds,
+                           health, willpower, humanity, hunger, experience,
+                           created_at, updated_at 
+                           FROM characters WHERE id = ?''', (character_id,)).fetchone()
+        conn.close()
+        
+        if not char:
+            return jsonify({'error': 'Character not found'}), 404
+        
+        result = {
+            'id': char[0],
+            'name': char[1],
+            'clan': char[2],
+            'concept': char[3],
+            'chronicle_id': char[4],
+            'generation': char[5],
+            'sire': char[6],
+            'predator_type': char[7],
+            'ambition': char[8],
+            'desire': char[9],
+            'attributes': json.loads(char[10]) if char[10] else {},
+            'skills': json.loads(char[11]) if char[11] else {},
+            'disciplines': json.loads(char[12]) if char[12] else {},
+            'backgrounds': json.loads(char[13]) if char[13] else {},
+            'health': char[14],
+            'willpower': char[15],
+            'humanity': char[16],
+            'hunger': char[17],
+            'experience': char[18],
+            'created_at': char[19],
+            'updated_at': char[20]
+        }
+        
+        return jsonify(result), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/character/<int:character_id>', methods=['PUT'])
+def update_character(character_id):
+    """Update a character"""
+    try:
+        data = request.json
+        
+        conn = sqlite3.connect('vtm_storyteller.db')
+        c = conn.cursor()
+        
+        # Check if character exists
+        char = c.execute('SELECT id FROM characters WHERE id = ?', (character_id,)).fetchone()
+        if not char:
+            conn.close()
+            return jsonify({'error': 'Character not found'}), 404
+        
+        # Build update query dynamically
+        updates = []
+        values = []
+        
+        for field in ['name', 'clan', 'concept', 'generation', 'sire', 'predator_type',
+                     'ambition', 'desire', 'health', 'willpower', 'humanity', 'hunger', 'experience']:
+            if field in data:
+                updates.append(f'{field} = ?')
+                values.append(data[field])
+        
+        for field in ['attributes', 'skills', 'disciplines', 'backgrounds']:
+            if field in data:
+                updates.append(f'{field} = ?')
+                values.append(json.dumps(data[field]))
+        
+        if updates:
+            updates.append('updated_at = CURRENT_TIMESTAMP')
+            values.append(character_id)
+            query = f"UPDATE characters SET {', '.join(updates)} WHERE id = ?"
+            c.execute(query, values)
+            conn.commit()
+        
+        conn.close()
+        
+        return jsonify({'message': 'Character updated successfully'}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/character/<int:character_id>', methods=['DELETE'])
+def delete_character(character_id):
+    """Delete a character"""
+    try:
+        conn = sqlite3.connect('vtm_storyteller.db')
+        c = conn.cursor()
+        
+        # Check if character exists
+        char = c.execute('SELECT id FROM characters WHERE id = ?', (character_id,)).fetchone()
+        if not char:
+            conn.close()
+            return jsonify({'error': 'Character not found'}), 404
+        
+        c.execute('DELETE FROM characters WHERE id = ?', (character_id,))
+        conn.commit()
+        conn.close()
+        
+        return jsonify({'message': 'Character deleted successfully'}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/character/link-demiplane', methods=['POST'])
+def link_demiplane_character():
+    """Link a Demiplane character"""
+    try:
+        data = request.json
+        url = data.get('url')
+        name = data.get('name')
+        clan = data.get('clan')
+        archetype = data.get('archetype', '')
+        
+        if not url or not name or not clan:
+            return jsonify({'error': 'URL, name, and clan are required'}), 400
+        
+        conn = sqlite3.connect('vtm_storyteller.db')
+        c = conn.cursor()
+        
+        # Create a character entry with demiplane_url
+        c.execute('''INSERT INTO characters 
+                    (name, clan, concept, demiplane_url, attributes, skills, disciplines, backgrounds)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)''',
+                 (name, clan, archetype, url, '{}', '{}', '{}', '{}'))
+        character_id = c.lastrowid
+        conn.commit()
+        conn.close()
+        
+        return jsonify({
+            'message': 'Demiplane character linked successfully',
+            'character_id': character_id
+        }), 201
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/rules/<rule_type>', methods=['GET'])
+def get_rules(rule_type):
+    """Get rules by type"""
+    try:
+        conn = sqlite3.connect('vtm_storyteller.db')
+        c = conn.cursor()
+        
+        if rule_type == 'character-creation':
+            rules = c.execute('SELECT * FROM character_creation_rules ORDER BY category, id').fetchall()
+            result = [{
+                'id': r[0], 'category': r[1], 'rule_name': r[2], 'description': r[3],
+                'points_available': r[4], 'minimum_value': r[5], 'maximum_value': r[6]
+            } for r in rules]
+        elif rule_type == 'attributes':
+            rules = c.execute('SELECT * FROM attributes_rules ORDER BY category, attribute_name').fetchall()
+            result = [{
+                'id': r[0], 'attribute_name': r[1], 'category': r[2],
+                'description': r[3], 'specializations': r[4]
+            } for r in rules]
+        elif rule_type == 'skills':
+            rules = c.execute('SELECT * FROM skills_rules ORDER BY category, skill_name').fetchall()
+            result = [{
+                'id': r[0], 'skill_name': r[1], 'category': r[2],
+                'description': r[3], 'specializations': r[4]
+            } for r in rules]
+        elif rule_type == 'combat':
+            rules = c.execute('SELECT * FROM combat_rules ORDER BY rule_type, rule_name').fetchall()
+            result = [{
+                'id': r[0], 'rule_type': r[1], 'rule_name': r[2],
+                'description': r[3], 'mechanics': r[4], 'examples': r[5]
+            } for r in rules]
+        elif rule_type == 'hunger':
+            rules = c.execute('SELECT * FROM hunger_rules ORDER BY hunger_level').fetchall()
+            result = [{
+                'id': r[0], 'hunger_level': r[1], 'description': r[2],
+                'effects': r[3], 'feeding_requirements': r[4]
+            } for r in rules]
+        elif rule_type == 'humanity':
+            rules = c.execute('SELECT * FROM humanity_rules ORDER BY humanity_level DESC').fetchall()
+            result = [{
+                'id': r[0], 'humanity_level': r[1], 'description': r[2],
+                'stains_to_lose': r[3], 'bane_severity': r[4], 'effects': r[5]
+            } for r in rules]
+        elif rule_type == 'experience':
+            rules = c.execute('SELECT * FROM experience_rules ORDER BY trait_type, current_rating').fetchall()
+            result = [{
+                'id': r[0], 'trait_type': r[1], 'current_rating': r[2],
+                'xp_cost': r[3], 'description': r[4]
+            } for r in rules]
+        else:
+            conn.close()
+            return jsonify({'error': 'Invalid rule type'}), 400
+        
+        conn.close()
+        return jsonify({'rules': result}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+
 @app.route('/health')
 def health_check():
     try:
