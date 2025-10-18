@@ -24,6 +24,10 @@ from campaign_session_api import *
 from command_system import CommandSystem
 from intelligent_dice_system import IntelligentDiceSystem
 from pdf_upload_handler import PDFUploadHandler
+from migrate_database import migrate_database
+
+# Run database migration on startup
+migrate_database()
 
 # Initialize intelligent dice system
 intelligent_dice = IntelligentDiceSystem()
