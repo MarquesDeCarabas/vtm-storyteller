@@ -6,4 +6,5 @@ markdown>=3.5.1
 discord.py>=2.3.2
 aiohttp>=3.9.0
 python-dotenv>=1.0.0
+reportlab>=4.2.0
 

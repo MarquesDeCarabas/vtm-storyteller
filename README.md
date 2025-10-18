@@ -342,6 +342,15 @@ CREATE TABLE dice_rolls (
 
 ---
 
-**System Status**: ✅ Fully Operational
-**Last Updated**: October 17, 2025
+## Author & Owner
+
+**MarquesDeCarabas**  
+ilmarquesducarabas@gmail.com
+
+This is a personal project for VTM 5e gameplay.
+
+---
+
+**System Status**: ✅ Fully Operational  
+**Last Updated**: October 17, 2025  
 **Version**: 2.0 (Hybrid Character System)

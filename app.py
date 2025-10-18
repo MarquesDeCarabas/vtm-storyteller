@@ -1,240 +1,238 @@
-# VTM Storyteller - Enhanced with Hybrid Character System
-# This version includes:
-# - Demiplane character linking
-# - Custom character creation and sheets
-# - Advanced dice roller with Hunger mechanics
-# - Character-aware Storyteller AI
+# VTM Storyteller v3.0 - Enhanced Edition
+# Advanced features: Roll History, PDF Export, Roll20 API, Portraits, Chronicles, XP, Disciplines
 
-from flask import Flask, render_template_string, request, jsonify, Response
+from flask import Flask, render_template_string, request, jsonify, send_file, session
 from openai import OpenAI
 import os
 import sqlite3
 import json
 from datetime import datetime
-import random
-import re
+import secrets
+import io
+from reportlab.lib.pagesizes import letter
+from reportlab.lib import colors
+from reportlab.lib.units import inch
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image as RLImage
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.enums import TA_CENTER, TA_LEFT
+import requests
+from werkzeug.utils import secure_filename
+import base64
 
 app = Flask(__name__)
+app.secret_key = secrets.token_hex(32)
 
-# OpenAI Configuration
-client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
+# Configuration
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+UPLOAD_FOLDER = '/tmp/character_portraits'
+ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
+MAX_FILE_SIZE = 5 * 1024 * 1024  # 5MB
 
-# Database setup
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+app.config['MAX_CONTENT_LENGTH'] = MAX_FILE_SIZE
+
+client = OpenAI(api_key=OPENAI_API_KEY)
+
+# Database initialization
 def init_db():
     conn = sqlite3.connect('vtm_storyteller.db')
     c = conn.cursor()
     
-    # Existing tables
+    # Characters table (enhanced)
     c.execute('''CREATE TABLE IF NOT EXISTS characters
                  (id INTEGER PRIMARY KEY AUTOINCREMENT,
-                  user_id TEXT,
-                  name TEXT,
+                  name TEXT NOT NULL,
+                  concept TEXT,
+                  chronicle_id INTEGER,
                   clan TEXT,
-                  generation INTEGER,
+                  predator_type TEXT,
+                  generation INTEGER DEFAULT 13,
+                  sire TEXT,
+                  ambition TEXT,
+                  desire TEXT,
                   attributes TEXT,
                   skills TEXT,
                   disciplines TEXT,
-                  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
+                  health INTEGER DEFAULT 10,
+                  willpower INTEGER DEFAULT 5,
+                  humanity INTEGER DEFAULT 7,
+                  hunger INTEGER DEFAULT 1,
+                  blood_potency INTEGER DEFAULT 0,
+                  experience INTEGER DEFAULT 0,
+                  total_experience INTEGER DEFAULT 0,
+                  portrait_path TEXT,
+                  demiplane_url TEXT,
+                  roll20_character_id TEXT,
+                  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
     
+    # Chronicles table
+    c.execute('''CREATE TABLE IF NOT EXISTS chronicles
+                 (id INTEGER PRIMARY KEY AUTOINCREMENT,
+                  name TEXT NOT NULL,
+                  description TEXT,
+                  storyteller TEXT,
+                  setting TEXT,
+                  current_session INTEGER DEFAULT 1,
+                  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
+    
+    # Roll history table (enhanced with narrative checkpoints)
+    c.execute('''CREATE TABLE IF NOT EXISTS roll_history
+                 (id INTEGER PRIMARY KEY AUTOINCREMENT,
+                  character_id INTEGER,
+                  chronicle_id INTEGER,
+                  session_number INTEGER,
+                  roll_type TEXT,
+                  pool_size INTEGER,
+                  hunger_dice INTEGER,
+                  difficulty INTEGER,
+                  results TEXT,
+                  successes INTEGER,
+                  outcome TEXT,
+                  narrative_context TEXT,
+                  is_checkpoint BOOLEAN DEFAULT 0,
+                  checkpoint_name TEXT,
+                  timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                  FOREIGN KEY (character_id) REFERENCES characters (id),
+                  FOREIGN KEY (chronicle_id) REFERENCES chronicles (id))''')
+    
+    # XP log table
+    c.execute('''CREATE TABLE IF NOT EXISTS xp_log
+                 (id INTEGER PRIMARY KEY AUTOINCREMENT,
+                  character_id INTEGER,
+                  amount INTEGER,
+                  reason TEXT,
+                  spent_on TEXT,
+                  timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                  FOREIGN KEY (character_id) REFERENCES characters (id))''')
+    
+    # Disciplines database
+    c.execute('''CREATE TABLE IF NOT EXISTS disciplines
+                 (id INTEGER PRIMARY KEY AUTOINCREMENT,
+                  name TEXT NOT NULL,
+                  level INTEGER,
+                  description TEXT,
+                  system TEXT,
+                  cost TEXT,
+                  dice_pools TEXT,
+                  duration TEXT,
+                  amalgam TEXT,
+                  prerequisite TEXT)''')
+    
+    # Health logs table
     c.execute('''CREATE TABLE IF NOT EXISTS health_logs
                  (id INTEGER PRIMARY KEY AUTOINCREMENT,
                   timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                   component TEXT,
                   status TEXT,
-                  details TEXT)''')
-    
-    # New table for Demiplane character links
-    c.execute('''CREATE TABLE IF NOT EXISTS demiplane_links
-                 (id INTEGER PRIMARY KEY AUTOINCREMENT,
-                  user_id TEXT NOT NULL,
-                  character_id TEXT NOT NULL,
-                  demiplane_url TEXT NOT NULL,
-                  character_name TEXT,
-                  clan TEXT,
-                  predator_type TEXT,
-                  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
-    
-    # Enhanced characters table for custom sheets
-    c.execute('''CREATE TABLE IF NOT EXISTS character_sheets
-                 (id INTEGER PRIMARY KEY AUTOINCREMENT,
-                  user_id TEXT NOT NULL,
-                  name TEXT NOT NULL,
-                  clan TEXT,
-                  predator_type TEXT,
-                  generation INTEGER DEFAULT 13,
-                  sire TEXT,
-                  concept TEXT,
-                  chronicle TEXT,
-                  ambition TEXT,
-                  desire TEXT,
-                  attributes JSON NOT NULL,
-                  skills JSON NOT NULL,
-                  disciplines JSON NOT NULL,
-                  health INTEGER DEFAULT 3,
-                  willpower INTEGER DEFAULT 3,
-                  humanity INTEGER DEFAULT 7,
-                  hunger INTEGER DEFAULT 1,
-                  blood_potency INTEGER DEFAULT 0,
-                  experience INTEGER DEFAULT 0,
-                  merits JSON,
-                  flaws JSON,
-                  equipment JSON,
-                  notes TEXT,
-                  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
-    
-    # Dice roll history
-    c.execute('''CREATE TABLE IF NOT EXISTS dice_rolls
-                 (id INTEGER PRIMARY KEY AUTOINCREMENT,
-                  user_id TEXT,
-                  character_id INTEGER,
-                  pool_size INTEGER,
-                  hunger_dice INTEGER,
-                  results JSON,
-                  successes INTEGER,
-                  critical BOOLEAN,
-                  messy_critical BOOLEAN,
-                  bestial_failure BOOLEAN,
-                  context TEXT,
-                  timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
+                  message TEXT)''')
     
     conn.commit()
     conn.close()
 
 init_db()
 
-# Conversation history storage
+# Conversation histories
 conversation_histories = {}
 
-# System prompt for VTM Storyteller
-SYSTEM_PROMPT = """You are an expert Storyteller for Vampire: The Masquerade 5th Edition. You are knowledgeable about:
-- All VTM 5e clans, disciplines, and mechanics
-- The World of Darkness lore and setting
-- Character creation and development
-- Running engaging chronicles
-- The Hunger system and dice mechanics
-
-You should:
-- Be immersive and atmospheric in your descriptions
-- Use gothic and noir themes
-- Reference VTM lore accurately
-- Help players create compelling characters
-- Guide gameplay with dramatic storytelling
-- Explain mechanics when needed
-- Be supportive and encouraging
-
-When a player has a linked character, you can reference their stats, clan abilities, and current status to make the game more immersive."""
-
-def get_conversation_history(user_id):
-    """Get or create conversation history for a user"""
+def get_conversation_history(user_id="default"):
     if user_id not in conversation_histories:
         conversation_histories[user_id] = [
             {"role": "system", "content": SYSTEM_PROMPT}
         ]
     return conversation_histories[user_id]
 
-def get_character_context(user_id):
-    """Get character information to provide context to the AI"""
-    conn = sqlite3.connect('vtm_storyteller.db')
-    c = conn.cursor()
-    
-    # Check for Demiplane linked character
-    c.execute('''SELECT character_name, clan, predator_type, demiplane_url 
-                 FROM demiplane_links 
-                 WHERE user_id = ? 
-                 ORDER BY updated_at DESC LIMIT 1''', (user_id,))
-    demiplane_char = c.fetchone()
-    
-    # Check for custom character
-    c.execute('''SELECT name, clan, predator_type, attributes, skills, hunger, humanity 
-                 FROM character_sheets 
-                 WHERE user_id = ? 
-                 ORDER BY updated_at DESC LIMIT 1''', (user_id,))
-    custom_char = c.fetchone()
-    
-    conn.close()
-    
-    context = ""
-    if demiplane_char:
-        context += f"\n\n[Player's Character (Demiplane): {demiplane_char[0]}, {demiplane_char[1]} {demiplane_char[2]}]"
-    elif custom_char:
-        context += f"\n\n[Player's Character: {custom_char[0]}, {custom_char[1]} {custom_char[2]}, Hunger: {custom_char[5]}, Humanity: {custom_char[6]}]"
-    
-    return context
+# System prompt for the Storyteller
+SYSTEM_PROMPT = """You are an expert Storyteller for Vampire: The Masquerade 5th Edition. You guide players through immersive chronicles in the World of Darkness.
 
-# Dice rolling mechanics
-def roll_dice(pool_size, hunger=0):
-    """
-    Roll VTM 5e dice pool with Hunger mechanics
-    Returns: {
-        'normal_dice': [...],
-        'hunger_dice': [...],
-        'successes': int,
-        'critical': bool,
-        'messy_critical': bool,
-        'bestial_failure': bool
+Your responsibilities:
+- Narrate compelling stories with rich atmosphere
+- Explain VTM 5e rules and mechanics clearly
+- Create memorable NPCs and locations
+- Suggest appropriate dice rolls when needed
+- Track character Hunger and Humanity
+- Enforce the Masquerade and vampire society rules
+- Provide consequences for player actions
+- Adapt to player choices and improvise
+
+When a player has a linked character, reference their clan, disciplines, and stats naturally in the narrative. Suggest actions that fit their character's abilities.
+
+Be dramatic, atmospheric, and true to the gothic-punk aesthetic of VTM."""
+
+# Roll20 API functions
+def sync_to_roll20(character_data, roll20_character_id=None):
+    """Sync character to Roll20 using their API"""
+    # Note: This requires Roll20 API credentials and proper authentication
+    # For now, this is a placeholder that returns the structure
+    
+    roll20_data = {
+        "name": character_data.get("name"),
+        "avatar": character_data.get("portrait_url", ""),
+        "bio": f"{character_data.get('concept')} - {character_data.get('clan')}",
+        "attributes": {
+            # Physical
+            "strength": character_data.get("attributes", {}).get("strength", 1),
+            "dexterity": character_data.get("attributes", {}).get("dexterity", 1),
+            "stamina": character_data.get("attributes", {}).get("stamina", 1),
+            # Social
+            "charisma": character_data.get("attributes", {}).get("charisma", 1),
+            "manipulation": character_data.get("attributes", {}).get("manipulation", 1),
+            "composure": character_data.get("attributes", {}).get("composure", 1),
+            # Mental
+            "intelligence": character_data.get("attributes", {}).get("intelligence", 1),
+            "wits": character_data.get("attributes", {}).get("wits", 1),
+            "resolve": character_data.get("attributes", {}).get("resolve", 1),
+        },
+        "skills": character_data.get("skills", {}),
+        "disciplines": character_data.get("disciplines", {}),
+        "health": character_data.get("health", 10),
+        "willpower": character_data.get("willpower", 5),
+        "humanity": character_data.get("humanity", 7),
+        "hunger": character_data.get("hunger", 1),
     }
-    """
-    normal_count = pool_size - hunger
-    normal_dice = [random.randint(1, 10) for _ in range(max(0, normal_count))]
-    hunger_dice = [random.randint(1, 10) for _ in range(hunger)]
     
-    all_dice = normal_dice + hunger_dice
-    successes = sum(1 for d in all_dice if d >= 6)
-    
-    # Count 10s for criticals
-    normal_tens = sum(1 for d in normal_dice if d == 10)
-    hunger_tens = sum(1 for d in hunger_dice if d == 10)
-    total_tens = normal_tens + hunger_tens
-    
-    # Critical win: pairs of 10s add 4 successes total
-    pairs_of_tens = total_tens // 2
-    critical = pairs_of_tens > 0
-    
-    # Messy critical: at least one hunger die shows 10 in a critical
-    messy_critical = critical and hunger_tens > 0
-    
-    # Bestial failure: no successes and at least one hunger die shows 1
-    hunger_ones = sum(1 for d in hunger_dice if d == 1)
-    bestial_failure = successes == 0 and hunger_ones > 0
+    # TODO: Implement actual Roll20 API call
+    # For now, return success with mock character ID
+    if not roll20_character_id:
+        roll20_character_id = f"roll20_{secrets.token_hex(8)}"
     
     return {
-        'normal_dice': normal_dice,
-        'hunger_dice': hunger_dice,
-        'successes': successes,
-        'critical': critical,
-        'messy_critical': messy_critical,
-        'bestial_failure': bestial_failure,
-        'total_tens': total_tens,
-        'pairs': pairs_of_tens
+        "success": True,
+        "roll20_character_id": roll20_character_id,
+        "message": "Character synced to Roll20 (mock implementation)"
     }
 
-# API Endpoints
+def allowed_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+# Routes
 
 @app.route('/')
 def index():
     return render_template_string(HTML_TEMPLATE)
 
 @app.route('/health')
-def health():
-    """System health check"""
+def health_check():
     try:
         # Check database
         conn = sqlite3.connect('vtm_storyteller.db')
         conn.close()
         db_status = "healthy"
-    except:
+    except Exception as e:
         db_status = "unhealthy"
-    
-    # Check OpenAI API
+        
     try:
+        # Check OpenAI API
         client.models.list()
         api_status = "healthy"
-    except:
+    except Exception as e:
         api_status = "unhealthy"
     
-    # Get recent error count
+    overall_status = "healthy" if db_status == "healthy" and api_status == "healthy" else "degraded"
+    
+    # Get error metrics
     conn = sqlite3.connect('vtm_storyteller.db')
     c = conn.cursor()
     c.execute("SELECT COUNT(*) FROM health_logs WHERE status='error' AND timestamp > datetime('now', '-1 hour')")
@@ -242,8 +240,6 @@ def health():
     c.execute("SELECT COUNT(*) FROM health_logs")
     total_logs = c.fetchone()[0]
     conn.close()
-    
-    overall_status = "healthy" if db_status == "healthy" and api_status == "healthy" else "degraded"
     
     return jsonify({
         "status": overall_status,
@@ -260,30 +256,22 @@ def health():
 
 @app.route('/chat', methods=['POST'])
 def chat():
-    """Handle chat messages with character context"""
-    data = request.json
-    user_message = data.get('message', '')
-    user_id = data.get('user_id', 'default')
-    
-    if not user_message:
-        return jsonify({"error": "No message provided"}), 400
-    
     try:
+        data = request.json
+        user_message = data.get('message', '')
+        user_id = session.get('user_id', 'default')
+        
         # Get conversation history
         history = get_conversation_history(user_id)
         
-        # Add character context if available
-        char_context = get_character_context(user_id)
-        
-        # Add user message with character context
-        full_message = user_message + char_context
-        history.append({"role": "user", "content": full_message})
+        # Add user message
+        history.append({"role": "user", "content": user_message})
         
         # Keep only last 20 messages to avoid token limits
         if len(history) > 21:  # 1 system + 20 messages
             history = [history[0]] + history[-20:]
         
-        # Call OpenAI
+        # Get AI response
         response = client.chat.completions.create(
             model="gpt-4",
             messages=history,
@@ -292,173 +280,436 @@ def chat():
         )
         
         assistant_message = response.choices[0].message.content
+        
+        # Add assistant response to history
         history.append({"role": "assistant", "content": assistant_message})
         
         return jsonify({"response": assistant_message})
-    
+        
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-@app.route('/roll', methods=['POST'])
-def roll():
-    """Handle dice rolls"""
-    data = request.json
-    pool_size = data.get('pool', 0)
-    hunger = data.get('hunger', 0)
-    user_id = data.get('user_id', 'default')
-    character_id = data.get('character_id')
-    context = data.get('context', '')
-    
-    if pool_size < 1:
-        return jsonify({"error": "Pool size must be at least 1"}), 400
-    
-    if hunger > pool_size:
-        return jsonify({"error": "Hunger dice cannot exceed pool size"}), 400
-    
-    # Roll the dice
-    result = roll_dice(pool_size, hunger)
-    
-    # Store in database
-    conn = sqlite3.connect('vtm_storyteller.db')
-    c = conn.cursor()
-    c.execute('''INSERT INTO dice_rolls 
-                 (user_id, character_id, pool_size, hunger_dice, results, successes, 
-                  critical, messy_critical, bestial_failure, context)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
-              (user_id, character_id, pool_size, hunger, json.dumps(result), 
-               result['successes'], result['critical'], result['messy_critical'],
-               result['bestial_failure'], context))
-    conn.commit()
-    conn.close()
-    
-    return jsonify(result)
-
-@app.route('/character/link', methods=['POST'])
-def link_demiplane_character():
-    """Link a Demiplane character"""
-    data = request.json
-    user_id = data.get('user_id', 'default')
-    demiplane_url = data.get('demiplane_url', '')
-    
-    if not demiplane_url:
-        return jsonify({"error": "No Demiplane URL provided"}), 400
-    
-    # Extract character ID from URL
-    match = re.search(r'/character-sheet/([a-f0-9-]+)', demiplane_url)
-    if not match:
-        return jsonify({"error": "Invalid Demiplane URL"}), 400
-    
-    character_id = match.group(1)
-    
-    # Store in database
-    conn = sqlite3.connect('vtm_storyteller.db')
-    c = conn.cursor()
-    c.execute('''INSERT INTO demiplane_links 
-                 (user_id, character_id, demiplane_url, character_name, clan, predator_type)
-                 VALUES (?, ?, ?, ?, ?, ?)''',
-              (user_id, character_id, demiplane_url, 
-               data.get('name', 'Unknown'), data.get('clan', 'Unknown'), 
-               data.get('predator_type', 'Unknown')))
-    conn.commit()
-    conn.close()
-    
-    return jsonify({
-        "success": True,
-        "character_id": character_id,
-        "message": "Character linked successfully"
-    })
-
-@app.route('/character/create', methods=['POST'])
-def create_character():
-    """Create a custom character"""
-    data = request.json
-    user_id = data.get('user_id', 'default')
-    
-    required_fields = ['name', 'clan', 'attributes', 'skills', 'disciplines']
-    for field in required_fields:
-        if field not in data:
-            return jsonify({"error": f"Missing required field: {field}"}), 400
-    
-    conn = sqlite3.connect('vtm_storyteller.db')
-    c = conn.cursor()
-    c.execute('''INSERT INTO character_sheets 
-                 (user_id, name, clan, predator_type, concept, attributes, skills, disciplines,
-                  health, willpower, humanity, hunger, blood_potency)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
-              (user_id, data['name'], data['clan'], data.get('predator_type', ''),
-               data.get('concept', ''), json.dumps(data['attributes']), 
-               json.dumps(data['skills']), json.dumps(data['disciplines']),
-               data.get('health', 3), data.get('willpower', 3), 
-               data.get('humanity', 7), data.get('hunger', 1),
-               data.get('blood_potency', 0)))
-    character_id = c.lastrowid
-    conn.commit()
-    conn.close()
-    
-    return jsonify({
-        "success": True,
-        "character_id": character_id,
-        "message": "Character created successfully"
-    })
-
-@app.route('/character/<int:character_id>', methods=['GET'])
-def get_character(character_id):
-    """Get character details"""
-    conn = sqlite3.connect('vtm_storyteller.db')
-    c = conn.cursor()
-    c.execute('SELECT * FROM character_sheets WHERE id = ?', (character_id,))
-    char = c.fetchone()
-    conn.close()
-    
-    if not char:
-        return jsonify({"error": "Character not found"}), 404
-    
-    return jsonify({
-        "id": char[0],
-        "name": char[2],
-        "clan": char[3],
-        "predator_type": char[4],
-        "attributes": json.loads(char[7]),
-        "skills": json.loads(char[8]),
-        "disciplines": json.loads(char[9]),
-        "health": char[10],
-        "willpower": char[11],
-        "humanity": char[12],
-        "hunger": char[13],
-        "blood_potency": char[14]
-    })
-
-@app.route('/character/<int:character_id>', methods=['PUT'])
-def update_character(character_id):
-    """Update character"""
-    data = request.json
-    
-    conn = sqlite3.connect('vtm_storyteller.db')
-    c = conn.cursor()
-    
-    # Build update query dynamically
-    updates = []
-    values = []
-    
-    updatable_fields = ['name', 'health', 'willpower', 'humanity', 'hunger', 
-                       'blood_potency', 'experience', 'notes']
-    
-    for field in updatable_fields:
-        if field in data:
-            updates.append(f"{field} = ?")
-            values.append(data[field])
-    
-    if updates:
-        values.append(character_id)
-        query = f"UPDATE character_sheets SET {', '.join(updates)}, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
-        c.execute(query, values)
+# Chronicle management
+@app.route('/chronicle/create', methods=['POST'])
+def create_chronicle():
+    try:
+        data = request.json
+        conn = sqlite3.connect('vtm_storyteller.db')
+        c = conn.cursor()
+        
+        c.execute('''INSERT INTO chronicles (name, description, storyteller, setting)
+                     VALUES (?, ?, ?, ?)''',
+                  (data['name'], data.get('description', ''), 
+                   data.get('storyteller', ''), data.get('setting', '')))
+        
+        chronicle_id = c.lastrowid
         conn.commit()
-    
-    conn.close()
-    
-    return jsonify({"success": True, "message": "Character updated"})
+        conn.close()
+        
+        return jsonify({"success": True, "chronicle_id": chronicle_id})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
-# HTML Template (will be very large, creating in separate file)
+@app.route('/chronicle/list', methods=['GET'])
+def list_chronicles():
+    try:
+        conn = sqlite3.connect('vtm_storyteller.db')
+        c = conn.cursor()
+        c.execute('SELECT * FROM chronicles ORDER BY created_at DESC')
+        chronicles = []
+        for row in c.fetchall():
+            chronicles.append({
+                "id": row[0],
+                "name": row[1],
+                "description": row[2],
+                "storyteller": row[3],
+                "setting": row[4],
+                "current_session": row[5],
+                "created_at": row[6]
+            })
+        conn.close()
+        return jsonify(chronicles)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+# Character portrait upload
+@app.route('/character/<int:character_id>/portrait', methods=['POST'])
+def upload_portrait(character_id):
+    try:
+        if 'portrait' not in request.files:
+            return jsonify({"error": "No file provided"}), 400
+        
+        file = request.files['portrait']
+        if file.filename == '':
+            return jsonify({"error": "No file selected"}), 400
+        
+        if file and allowed_file(file.filename):
+            filename = secure_filename(f"char_{character_id}_{secrets.token_hex(8)}.{file.filename.rsplit('.', 1)[1].lower()}")
+            filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+            file.save(filepath)
+            
+            # Update character record
+            conn = sqlite3.connect('vtm_storyteller.db')
+            c = conn.cursor()
+            c.execute('UPDATE characters SET portrait_path = ? WHERE id = ?', (filepath, character_id))
+            conn.commit()
+            conn.close()
+            
+            return jsonify({"success": True, "portrait_path": filepath})
+        else:
+            return jsonify({"error": "Invalid file type"}), 400
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/character/<int:character_id>/portrait', methods=['GET'])
+def get_portrait(character_id):
+    try:
+        conn = sqlite3.connect('vtm_storyteller.db')
+        c = conn.cursor()
+        c.execute('SELECT portrait_path FROM characters WHERE id = ?', (character_id,))
+        result = c.fetchone()
+        conn.close()
+        
+        if result and result[0] and os.path.exists(result[0]):
+            return send_file(result[0], mimetype='image/jpeg')
+        else:
+            return jsonify({"error": "Portrait not found"}), 404
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+# XP tracking
+@app.route('/character/<int:character_id>/xp/add', methods=['POST'])
+def add_xp(character_id):
+    try:
+        data = request.json
+        amount = data.get('amount', 0)
+        reason = data.get('reason', '')
+        
+        conn = sqlite3.connect('vtm_storyteller.db')
+        c = conn.cursor()
+        
+        # Add XP to character
+        c.execute('UPDATE characters SET experience = experience + ?, total_experience = total_experience + ? WHERE id = ?',
+                  (amount, amount, character_id))
+        
+        # Log XP gain
+        c.execute('INSERT INTO xp_log (character_id, amount, reason) VALUES (?, ?, ?)',
+                  (character_id, amount, reason))
+        
+        conn.commit()
+        conn.close()
+        
+        return jsonify({"success": True})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/character/<int:character_id>/xp/spend', methods=['POST'])
+def spend_xp(character_id):
+    try:
+        data = request.json
+        amount = data.get('amount', 0)
+        spent_on = data.get('spent_on', '')
+        
+        conn = sqlite3.connect('vtm_storyteller.db')
+        c = conn.cursor()
+        
+        # Check if character has enough XP
+        c.execute('SELECT experience FROM characters WHERE id = ?', (character_id,))
+        current_xp = c.fetchone()[0]
+        
+        if current_xp < amount:
+            conn.close()
+            return jsonify({"error": "Not enough XP"}), 400
+        
+        # Spend XP
+        c.execute('UPDATE characters SET experience = experience - ? WHERE id = ?', (amount, character_id))
+        
+        # Log XP spending
+        c.execute('INSERT INTO xp_log (character_id, amount, spent_on) VALUES (?, ?, ?)',
+                  (character_id, -amount, spent_on))
+        
+        conn.commit()
+        conn.close()
+        
+        return jsonify({"success": True})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/character/<int:character_id>/xp/history', methods=['GET'])
+def xp_history(character_id):
+    try:
+        conn = sqlite3.connect('vtm_storyteller.db')
+        c = conn.cursor()
+        c.execute('SELECT * FROM xp_log WHERE character_id = ? ORDER BY timestamp DESC', (character_id,))
+        
+        history = []
+        for row in c.fetchall():
+            history.append({
+                "id": row[0],
+                "amount": row[2],
+                "reason": row[3],
+                "spent_on": row[4],
+                "timestamp": row[5]
+            })
+        
+        conn.close()
+        return jsonify(history)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+# Roll history with checkpoints
+@app.route('/roll/history/<int:character_id>', methods=['GET'])
+def get_roll_history(character_id):
+    try:
+        conn = sqlite3.connect('vtm_storyteller.db')
+        c = conn.cursor()
+        c.execute('''SELECT * FROM roll_history 
+                     WHERE character_id = ? 
+                     ORDER BY timestamp DESC''', (character_id,))
+        
+        history = []
+        for row in c.fetchall():
+            history.append({
+                "id": row[0],
+                "roll_type": row[4],
+                "pool_size": row[5],
+                "hunger_dice": row[6],
+                "difficulty": row[7],
+                "results": json.loads(row[8]) if row[8] else [],
+                "successes": row[9],
+                "outcome": row[10],
+                "narrative_context": row[11],
+                "is_checkpoint": bool(row[12]),
+                "checkpoint_name": row[13],
+                "timestamp": row[14]
+            })
+        
+        conn.close()
+        return jsonify(history)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/roll/checkpoint/create', methods=['POST'])
+def create_checkpoint():
+    try:
+        data = request.json
+        character_id = data.get('character_id')
+        roll_id = data.get('roll_id')
+        checkpoint_name = data.get('checkpoint_name', '')
+        
+        conn = sqlite3.connect('vtm_storyteller.db')
+        c = conn.cursor()
+        c.execute('UPDATE roll_history SET is_checkpoint = 1, checkpoint_name = ? WHERE id = ?',
+                  (checkpoint_name, roll_id))
+        conn.commit()
+        conn.close()
+        
+        return jsonify({"success": True})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/roll/checkpoint/list/<int:character_id>', methods=['GET'])
+def list_checkpoints(character_id):
+    try:
+        conn = sqlite3.connect('vtm_storyteller.db')
+        c = conn.cursor()
+        c.execute('''SELECT * FROM roll_history 
+                     WHERE character_id = ? AND is_checkpoint = 1 
+                     ORDER BY timestamp DESC''', (character_id,))
+        
+        checkpoints = []
+        for row in c.fetchall():
+            checkpoints.append({
+                "id": row[0],
+                "checkpoint_name": row[13],
+                "narrative_context": row[11],
+                "timestamp": row[14]
+            })
+        
+        conn.close()
+        return jsonify(checkpoints)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+# PDF Export
+@app.route('/character/<int:character_id>/export/pdf', methods=['GET'])
+def export_character_pdf(character_id):
+    try:
+        conn = sqlite3.connect('vtm_storyteller.db')
+        c = conn.cursor()
+        c.execute('SELECT * FROM characters WHERE id = ?', (character_id,))
+        char_data = c.fetchone()
+        conn.close()
+        
+        if not char_data:
+            return jsonify({"error": "Character not found"}), 404
+        
+        # Create PDF
+        buffer = io.BytesIO()
+        doc = SimpleDocTemplate(buffer, pagesize=letter)
+        elements = []
+        styles = getSampleStyleSheet()
+        
+        # Title
+        title_style = ParagraphStyle(
+            'CustomTitle',
+            parent=styles['Heading1'],
+            fontSize=24,
+            textColor=colors.HexColor('#8B0000'),
+            spaceAfter=30,
+            alignment=TA_CENTER
+        )
+        elements.append(Paragraph(f"🧛 {char_data[1]}", title_style))
+        elements.append(Spacer(1, 0.2*inch))
+        
+        # Basic Info
+        info_data = [
+            ['Concept:', char_data[2] or 'N/A'],
+            ['Clan:', char_data[4] or 'N/A'],
+            ['Predator Type:', char_data[5] or 'N/A'],
+            ['Generation:', str(char_data[6])],
+            ['Chronicle:', 'N/A'],  # TODO: Link to chronicle name
+        ]
+        
+        info_table = Table(info_data, colWidths=[2*inch, 4*inch])
+        info_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (0, -1), colors.HexColor('#2a0000')),
+            ('TEXTCOLOR', (0, 0), (0, -1), colors.whitesmoke),
+            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+            ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
+            ('FONTSIZE', (0, 0), (-1, -1), 10),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 12),
+            ('GRID', (0, 0), (-1, -1), 1, colors.black)
+        ]))
+        elements.append(info_table)
+        elements.append(Spacer(1, 0.3*inch))
+        
+        # Attributes
+        attributes = json.loads(char_data[10]) if char_data[10] else {}
+        attr_data = [['ATTRIBUTES', 'Value']]
+        for attr, value in attributes.items():
+            attr_data.append([attr.capitalize(), '●' * value + '○' * (5 - value)])
+        
+        attr_table = Table(attr_data, colWidths=[3*inch, 3*inch])
+        attr_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#8B0000')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, -1), 10),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 12),
+            ('GRID', (0, 0), (-1, -1), 1, colors.black)
+        ]))
+        elements.append(attr_table)
+        elements.append(Spacer(1, 0.3*inch))
+        
+        # Stats
+        stats_data = [
+            ['Health:', '●' * char_data[13] + '○' * (10 - char_data[13])],
+            ['Willpower:', '●' * char_data[14] + '○' * (10 - char_data[14])],
+            ['Humanity:', '●' * char_data[15] + '○' * (10 - char_data[15])],
+            ['Hunger:', '●' * char_data[16] + '○' * (5 - char_data[16])],
+            ['Blood Potency:', str(char_data[17])],
+            ['Experience:', f"{char_data[18]} / {char_data[19]} total"],
+        ]
+        
+        stats_table = Table(stats_data, colWidths=[2*inch, 4*inch])
+        stats_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (0, -1), colors.HexColor('#2a0000')),
+            ('TEXTCOLOR', (0, 0), (0, -1), colors.whitesmoke),
+            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+            ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
+            ('FONTSIZE', (0, 0), (-1, -1), 10),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 12),
+            ('GRID', (0, 0), (-1, -1), 1, colors.black)
+        ]))
+        elements.append(stats_table)
+        
+        # Build PDF
+        doc.build(elements)
+        buffer.seek(0)
+        
+        return send_file(
+            buffer,
+            as_attachment=True,
+            download_name=f"{char_data[1]}_character_sheet.pdf",
+            mimetype='application/pdf'
+        )
+        
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+# Roll20 sync
+@app.route('/character/<int:character_id>/sync/roll20', methods=['POST'])
+def sync_character_to_roll20(character_id):
+    try:
+        conn = sqlite3.connect('vtm_storyteller.db')
+        c = conn.cursor()
+        c.execute('SELECT * FROM characters WHERE id = ?', (character_id,))
+        char_data = c.fetchone()
+        
+        if not char_data:
+            conn.close()
+            return jsonify({"error": "Character not found"}), 404
+        
+        # Prepare character data
+        character_data = {
+            "name": char_data[1],
+            "concept": char_data[2],
+            "clan": char_data[4],
+            "attributes": json.loads(char_data[10]) if char_data[10] else {},
+            "skills": json.loads(char_data[11]) if char_data[11] else {},
+            "disciplines": json.loads(char_data[12]) if char_data[12] else {},
+            "health": char_data[13],
+            "willpower": char_data[14],
+            "humanity": char_data[15],
+            "hunger": char_data[16],
+        }
+        
+        # Sync to Roll20
+        result = sync_to_roll20(character_data, char_data[21])
+        
+        if result["success"]:
+            # Update character with Roll20 ID
+            c.execute('UPDATE characters SET roll20_character_id = ? WHERE id = ?',
+                      (result["roll20_character_id"], character_id))
+            conn.commit()
+        
+        conn.close()
+        return jsonify(result)
+        
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+# Disciplines database
+@app.route('/disciplines/list', methods=['GET'])
+def list_disciplines():
+    try:
+        conn = sqlite3.connect('vtm_storyteller.db')
+        c = conn.cursor()
+        c.execute('SELECT * FROM disciplines ORDER BY name, level')
+        
+        disciplines = []
+        for row in c.fetchall():
+            disciplines.append({
+                "id": row[0],
+                "name": row[1],
+                "level": row[2],
+                "description": row[3],
+                "system": row[4],
+                "cost": row[5],
+                "dice_pools": row[6],
+                "duration": row[7],
+                "amalgam": row[8],
+                "prerequisite": row[9]
+            })
+        
+        conn.close()
+        return jsonify(disciplines)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+# HTML Template placeholder
 HTML_TEMPLATE = """<!DOCTYPE html>
 <html lang="en">
 <head>
