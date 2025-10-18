@@ -23,12 +23,16 @@ import base64
 from campaign_session_api import *
 from command_system import CommandSystem
 from intelligent_dice_system import IntelligentDiceSystem
+from pdf_upload_handler import PDFUploadHandler
 
 # Initialize intelligent dice system
 intelligent_dice = IntelligentDiceSystem()
 
 # Initialize command system with intelligent dice
 command_system = CommandSystem(intelligent_dice=intelligent_dice)
+
+# Initialize PDF upload handler
+pdf_handler = PDFUploadHandler()
 
 
 # ElevenLabs TTS Integration
@@ -95,7 +99,7 @@ app.secret_key = secrets.token_hex(32)
 # Configuration
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 UPLOAD_FOLDER = '/tmp/character_portraits'
-ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
+ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp', 'pdf'}
 MAX_FILE_SIZE = 5 * 1024 * 1024  # 5MB
 
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
@@ -2115,6 +2119,35 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                 </div>
                 
                 <div class="option-card">
+                    <h3>📄 Upload Character Sheet PDF</h3>
+                    <p>Upload your filled VTM 5e character sheet PDF. The system will automatically extract all data and link to your Chronicle.</p>
+                    <button onclick="showPDFUpload()">Upload PDF</button>
+                    
+                    <div class="pdf-upload-section" id="pdf-upload-section" style="display: none;">
+                        <h4>Select Your Character Sheet PDF</h4>
+                        <input type="file" id="pdf-file-input" accept=".pdf" style="margin: 15px 0;">
+                        <div id="pdf-upload-progress" style="display: none; margin: 15px 0;">
+                            <div style="background: #1a0505; height: 30px; border-radius: 5px; overflow: hidden;">
+                                <div id="pdf-progress-bar" style="background: #8b0000; height: 100%; width: 0%; transition: width 0.3s;"></div>
+                            </div>
+                            <p id="pdf-progress-text" style="margin-top: 10px; color: #999;">Uploading...</p>
+                        </div>
+                        <button onclick="uploadPDF()" style="margin-top: 15px;">Upload & Parse</button>
+                        
+                        <div class="pdf-upload-result" id="pdf-upload-result" style="display: none; margin-top: 20px;">
+                            <h4 style="color: #00ff00;">✓ Character Loaded from PDF</h4>
+                            <p><strong>Name:</strong> <span id="pdf-char-name"></span></p>
+                            <p><strong>Chronicle:</strong> <span id="pdf-char-chronicle"></span></p>
+                            <p><strong>Clan:</strong> <span id="pdf-char-clan"></span></p>
+                            <div id="pdf-warnings" style="margin-top: 15px; display: none;">
+                                <h5 style="color: #ffaa00;">⚠ Warnings:</h5>
+                                <ul id="pdf-warning-list" style="color: #ffaa00; margin-left: 20px;"></ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="option-card">
                     <h3>✨ Create Custom Character</h3>
                     <p>Create a new character using our built-in character creation wizard. Perfect for quick games or if you don't have a Demiplane account.</p>
                     <button onclick="startCharacterCreation()">Create Character</button>
@@ -2446,6 +2479,119 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             } catch (error) {
                 alert('Error linking character: ' + error.message);
             }
+        }
+        
+        // PDF Upload
+        function showPDFUpload() {
+            document.getElementById('pdf-upload-section').style.display = 'block';
+        }
+        
+        async function uploadPDF() {
+            const fileInput = document.getElementById('pdf-file-input');
+            const file = fileInput.files[0];
+            
+            if (!file) {
+                alert('Please select a PDF file');
+                return;
+            }
+            
+            if (!file.name.endsWith('.pdf')) {
+                alert('Please select a valid PDF file');
+                return;
+            }
+            
+            // Show progress
+            document.getElementById('pdf-upload-progress').style.display = 'block';
+            document.getElementById('pdf-progress-bar').style.width = '30%';
+            document.getElementById('pdf-progress-text').textContent = 'Uploading PDF...';
+            
+            try {
+                const formData = new FormData();
+                formData.append('file', file);
+                
+                const response = await fetch('/character/upload-pdf', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                document.getElementById('pdf-progress-bar').style.width = '70%';
+                document.getElementById('pdf-progress-text').textContent = 'Parsing character data...';
+                
+                const data = await response.json();
+                
+                document.getElementById('pdf-progress-bar').style.width = '100%';
+                document.getElementById('pdf-progress-text').textContent = 'Complete!';
+                
+                if (data.success) {
+                    // Show result
+                    document.getElementById('pdf-char-name').textContent = data.character_name;
+                    document.getElementById('pdf-char-chronicle').textContent = data.chronicle;
+                    document.getElementById('pdf-char-clan').textContent = data.clan;
+                    
+                    // Show warnings if any
+                    if (data.warnings && data.warnings.length > 0) {
+                        const warningList = document.getElementById('pdf-warning-list');
+                        warningList.innerHTML = data.warnings.map(w => `<li>${w}</li>`).join('');
+                        document.getElementById('pdf-warnings').style.display = 'block';
+                    }
+                    
+                    document.getElementById('pdf-upload-result').style.display = 'block';
+                    
+                    // Hide progress after 1 second
+                    setTimeout(() => {
+                        document.getElementById('pdf-upload-progress').style.display = 'none';
+                        document.getElementById('pdf-progress-bar').style.width = '0%';
+                    }, 1000);
+                    
+                    alert(`Character "${data.character_name}" ${data.message}`);
+                    
+                    // Reload character sheet
+                    if (data.character_id) {
+                        currentCharacter = data.character_id;
+                        loadCharacterSheet(data.character_id);
+                    }
+                } else {
+                    document.getElementById('pdf-upload-progress').style.display = 'none';
+                    alert('Error: ' + data.error);
+                }
+            } catch (error) {
+                document.getElementById('pdf-upload-progress').style.display = 'none';
+                alert('Error uploading PDF: ' + error.message);
+            }
+        }
+        
+        async function reuploadPDF(characterId) {
+            const fileInput = document.createElement('input');
+            fileInput.type = 'file';
+            fileInput.accept = '.pdf';
+            
+            fileInput.onchange = async (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+                
+                try {
+                    const formData = new FormData();
+                    formData.append('file', file);
+                    
+                    const response = await fetch(`/character/${characterId}/reupload-pdf`, {
+                        method: 'POST',
+                        body: formData
+                    });
+                    
+                    const data = await response.json();
+                    
+                    if (data.success) {
+                        alert(`Character "${data.character_name}" updated successfully!`);
+                        loadCharacterSheet(characterId);
+                    } else {
+                        alert('Error: ' + data.error);
+                    }
+                } catch (error) {
+                    alert('Error re-uploading PDF: ' + error.message);
+                }
+            };
+            
+            fileInput.click();
         }
         
         // Character creation
@@ -2979,6 +3125,107 @@ def api_list_items(campaign_id):
 def api_search_items(campaign_id):
     search_term = request.args.get('q', '')
     return search_campaign_items(campaign_id, search_term)
+
+@app.route('/character/upload-pdf', methods=['POST'])
+def upload_character_pdf():
+    """
+    Upload a VTM 5e character sheet PDF.
+    Creates new character or updates existing one.
+    """
+    try:
+        # Check if file is in request
+        if 'file' not in request.files:
+            return jsonify({'success': False, 'error': 'No file provided'}), 400
+        
+        file = request.files['file']
+        
+        if file.filename == '':
+            return jsonify({'success': False, 'error': 'No file selected'}), 400
+        
+        # Check file type
+        if not pdf_handler.allowed_file(file.filename):
+            return jsonify({'success': False, 'error': 'Only PDF files are allowed'}), 400
+        
+        # Get optional character_id for updates
+        character_id = request.form.get('character_id', None)
+        if character_id:
+            character_id = int(character_id)
+        
+        # Handle upload
+        result = pdf_handler.handle_upload(file, character_id)
+        
+        if result['success']:
+            # Store character ID in session
+            session['active_character_id'] = result['character_id']
+            
+            return jsonify({
+                'success': True,
+                'message': f"Character {result['action']} successfully",
+                'character_id': result['character_id'],
+                'character_name': result['data']['name'],
+                'chronicle': result['data']['chronicle'],
+                'clan': result['data']['clan'],
+                'warnings': result['errors'] if result['errors'] else []
+            }), 200
+        else:
+            return jsonify(result), 500
+            
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/character/<int:character_id>/pdf', methods=['GET'])
+def get_character_pdf(character_id):
+    """
+    Download the PDF file for a character.
+    """
+    try:
+        pdf_path = pdf_handler.get_character_pdf_path(character_id)
+        
+        if not pdf_path or not os.path.exists(pdf_path):
+            return jsonify({'success': False, 'error': 'PDF not found'}), 404
+        
+        return send_file(pdf_path, as_attachment=True, download_name=f"character_{character_id}.pdf")
+        
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/character/<int:character_id>/reupload-pdf', methods=['POST'])
+def reupload_character_pdf(character_id):
+    """
+    Re-upload PDF to update an existing character.
+    Useful when character sheet is updated with experience, etc.
+    """
+    try:
+        if 'file' not in request.files:
+            return jsonify({'success': False, 'error': 'No file provided'}), 400
+        
+        file = request.files['file']
+        
+        if file.filename == '':
+            return jsonify({'success': False, 'error': 'No file selected'}), 400
+        
+        if not pdf_handler.allowed_file(file.filename):
+            return jsonify({'success': False, 'error': 'Only PDF files are allowed'}), 400
+        
+        # Handle upload with character_id for update
+        result = pdf_handler.handle_upload(file, character_id)
+        
+        if result['success']:
+            return jsonify({
+                'success': True,
+                'message': 'Character updated successfully from PDF',
+                'character_id': result['character_id'],
+                'character_name': result['data']['name'],
+                'warnings': result['errors'] if result['errors'] else []
+            }), 200
+        else:
+            return jsonify(result), 500
+            
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=8080, debug=False)
