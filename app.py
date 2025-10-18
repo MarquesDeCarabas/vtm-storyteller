@@ -21,11 +21,14 @@ import base64
 
 # Campaign and Session Management
 from campaign_session_api import *
-from command_system import command_system
+from command_system import CommandSystem
 from intelligent_dice_system import IntelligentDiceSystem
 
 # Initialize intelligent dice system
 intelligent_dice = IntelligentDiceSystem()
+
+# Initialize command system with intelligent dice
+command_system = CommandSystem(intelligent_dice=intelligent_dice)
 
 
 # ElevenLabs TTS Integration

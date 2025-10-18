@@ -8,7 +8,8 @@ from campaign_session_api import *
 from campaign_recall import *
 
 class CommandSystem:
-    def __init__(self):
+    def __init__(self, intelligent_dice=None):
+        self.intelligent_dice = intelligent_dice
         self.commands = {
             'campaign': self.handle_campaign_command,
             'session': self.handle_session_command,
@@ -519,7 +520,7 @@ class CommandSystem:
         session_id = get_active_session_id() or 'default'
         
         # Parse the roll command
-        roll_params = intelligent_dice.parse_roll_command(f'/roll {args}')
+        roll_params = self.intelligent_dice.parse_roll_command(f'/roll {args}')
         
         # Get character data
         character_id = session.get('active_character_id')
@@ -538,7 +539,7 @@ class CommandSystem:
         # Determine what to roll
         if roll_params['use_last_suggested']:
             # Use last suggested roll
-            last_roll = intelligent_dice.get_last_suggested_roll(session_id)
+            last_roll = self.intelligent_dice.get_last_suggested_roll(session_id)
             if not last_roll:
                 return {'error': 'No previous roll suggestion found. Please specify what to roll (e.g., /roll Intelligence + Auspex)'}
             
@@ -552,7 +553,7 @@ class CommandSystem:
             roll_data = roll_params
         
         # Calculate dice pool
-        pool_size, description = intelligent_dice.calculate_dice_pool(character_data, roll_data)
+        pool_size, description = self.intelligent_dice.calculate_dice_pool(character_data, roll_data)
         
         if pool_size == 0:
             return {'error': f'Cannot roll {description}. Dice pool is 0.'}
@@ -561,7 +562,7 @@ class CommandSystem:
         hunger = character_data.get('hunger', 0)
         
         # Roll the dice
-        result = intelligent_dice.roll_dice(pool_size, hunger, difficulty=0)
+        result = self.intelligent_dice.roll_dice(pool_size, hunger, difficulty=0)
         
         # Format response
         response = f"🎲 **Rolling {description}**\n"
