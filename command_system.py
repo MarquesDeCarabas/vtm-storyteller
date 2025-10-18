@@ -514,32 +514,65 @@ class CommandSystem:
     # ==================== DICE COMMANDS ====================
     
     def handle_roll_command(self, args):
-        """Handle /roll commands"""
-        if not args:
-            return {'error': 'Usage: /roll <pool> <hunger> or /roll <attribute>+<skill>'}
+        """Handle /roll commands with intelligent context awareness"""
+        # Get session ID for tracking
+        session_id = get_active_session_id() or 'default'
         
-        # Try to parse as "pool hunger"
-        parts = args.split()
-        if len(parts) == 2 and parts[0].isdigit() and parts[1].isdigit():
-            pool = int(parts[0])
-            hunger = int(parts[1])
-            return {
-                'success': True,
-                'message': f'🎲 Rolling {pool} dice with {hunger} hunger dice...\n\nPlease use the Dice Roller tab for actual dice rolling.',
-                'roll_data': {'pool': pool, 'hunger': hunger}
-            }
+        # Parse the roll command
+        roll_params = intelligent_dice.parse_roll_command(f'/roll {args}')
         
-        # Try to parse as "attribute+skill"
-        if '+' in args:
-            parts = args.lower().split('+')
-            if len(parts) == 2:
-                return {
-                    'success': True,
-                    'message': f'🎲 Rolling {parts[0].strip()} + {parts[1].strip()}...\n\nPlease use the Dice Roller tab for actual dice rolling.',
-                    'roll_data': {'attribute': parts[0].strip(), 'skill': parts[1].strip()}
-                }
+        # Get character data
+        character_id = session.get('active_character_id')
+        if not character_id:
+            return {'error': 'No active character. Please create or link a character first.'}
         
-        return {'error': 'Invalid roll format. Use: /roll <pool> <hunger> or /roll <attribute>+<skill>'}
+        conn = get_db_connection()
+        character = conn.execute('SELECT * FROM characters WHERE id = ?', (character_id,)).fetchone()
+        conn.close()
+        
+        if not character:
+            return {'error': 'Character not found.'}
+        
+        character_data = dict(character)
+        
+        # Determine what to roll
+        if roll_params['use_last_suggested']:
+            # Use last suggested roll
+            last_roll = intelligent_dice.get_last_suggested_roll(session_id)
+            if not last_roll:
+                return {'error': 'No previous roll suggestion found. Please specify what to roll (e.g., /roll Intelligence + Auspex)'}
+            
+            # Merge blood surge if specified
+            if roll_params['blood_surge']:
+                last_roll['blood_surge'] = True
+            
+            roll_data = last_roll
+        else:
+            # Use specified roll
+            roll_data = roll_params
+        
+        # Calculate dice pool
+        pool_size, description = intelligent_dice.calculate_dice_pool(character_data, roll_data)
+        
+        if pool_size == 0:
+            return {'error': f'Cannot roll {description}. Dice pool is 0.'}
+        
+        # Get hunger from character
+        hunger = character_data.get('hunger', 0)
+        
+        # Roll the dice
+        result = intelligent_dice.roll_dice(pool_size, hunger, difficulty=0)
+        
+        # Format response
+        response = f"🎲 **Rolling {description}**\n"
+        response += f"Pool: {pool_size} dice | Hunger: {hunger}\n\n"
+        response += result['message']
+        
+        return {
+            'success': True,
+            'message': response,
+            'roll_result': result
+        }
     
     # ==================== HELP COMMAND ====================
     

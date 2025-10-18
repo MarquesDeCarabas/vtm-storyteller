@@ -857,6 +857,17 @@ def chat():
         # Add assistant response to history
         history.append({"role": "assistant", "content": assistant_message})
         
+        # Detect and store suggested dice rolls from AI
+        try:
+            from intelligent_dice_system import intelligent_dice
+            roll_suggestion = intelligent_dice.extract_roll_from_ai_message(assistant_message)
+            if roll_suggestion:
+                session_id = get_active_session_id() or 'default'
+                intelligent_dice.store_suggested_roll(session_id, roll_suggestion)
+                print(f"🎲 Stored suggested roll: {roll_suggestion}")
+        except Exception as dice_error:
+            print(f"Could not detect/store dice roll: {dice_error}")
+        
         # Auto-save any generated content to campaign database
         try:
             if campaign_integration:
