@@ -192,6 +192,93 @@ def init_db():
                   status TEXT,
                   message TEXT)''')
     
+    # Campaign Database tables
+    c.execute('''CREATE TABLE IF NOT EXISTS campaigns
+                 (id INTEGER PRIMARY KEY AUTOINCREMENT,
+                  name TEXT NOT NULL UNIQUE,
+                  description TEXT,
+                  city TEXT,
+                  faction TEXT,
+                  status TEXT DEFAULT 'active',
+                  current_session INTEGER DEFAULT 0,
+                  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
+    
+    c.execute('''CREATE TABLE IF NOT EXISTS campaign_npcs
+                 (id INTEGER PRIMARY KEY AUTOINCREMENT,
+                  campaign_id INTEGER,
+                  name TEXT NOT NULL,
+                  real_name TEXT,
+                  clan TEXT,
+                  faction TEXT,
+                  position TEXT,
+                  attributes TEXT,
+                  skills TEXT,
+                  disciplines TEXT,
+                  personality TEXT,
+                  appearance TEXT,
+                  quirks TEXT,
+                  backstory TEXT,
+                  status TEXT DEFAULT 'alive',
+                  tags TEXT,
+                  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                  FOREIGN KEY (campaign_id) REFERENCES campaigns (id))''')
+    
+    c.execute('''CREATE TABLE IF NOT EXISTS campaign_locations
+                 (id INTEGER PRIMARY KEY AUTOINCREMENT,
+                  campaign_id INTEGER,
+                  name TEXT NOT NULL,
+                  type TEXT,
+                  city TEXT,
+                  description TEXT,
+                  rooms TEXT,
+                  atmosphere TEXT,
+                  security TEXT,
+                  hidden_elements TEXT,
+                  status TEXT DEFAULT 'active',
+                  tags TEXT,
+                  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                  FOREIGN KEY (campaign_id) REFERENCES campaigns (id))''')
+    
+    c.execute('''CREATE TABLE IF NOT EXISTS campaign_items
+                 (id INTEGER PRIMARY KEY AUTOINCREMENT,
+                  campaign_id INTEGER,
+                  name TEXT NOT NULL,
+                  type TEXT,
+                  stats TEXT,
+                  features TEXT,
+                  backstory TEXT,
+                  owner TEXT,
+                  status TEXT DEFAULT 'intact',
+                  tags TEXT,
+                  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                  FOREIGN KEY (campaign_id) REFERENCES campaigns (id))''')
+    
+    c.execute('''CREATE TABLE IF NOT EXISTS campaign_events
+                 (id INTEGER PRIMARY KEY AUTOINCREMENT,
+                  campaign_id INTEGER,
+                  session_number INTEGER,
+                  event_type TEXT,
+                  description TEXT,
+                  participants TEXT,
+                  outcome TEXT,
+                  timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                  FOREIGN KEY (campaign_id) REFERENCES campaigns (id))''')
+    
+    c.execute('''CREATE TABLE IF NOT EXISTS npc_relationships
+                 (id INTEGER PRIMARY KEY AUTOINCREMENT,
+                  npc1_id INTEGER,
+                  npc2_id INTEGER,
+                  relationship_type TEXT,
+                  description TEXT,
+                  strength INTEGER DEFAULT 0,
+                  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                  FOREIGN KEY (npc1_id) REFERENCES campaign_npcs (id),
+                  FOREIGN KEY (npc2_id) REFERENCES campaign_npcs (id))''')
+    
     conn.commit()
     conn.close()
 
