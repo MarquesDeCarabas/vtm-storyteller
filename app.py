@@ -320,10 +320,14 @@ def list_characters():
         return jsonify({'error': str(e)}), 500
 
 @app.route('/character', methods=['POST'])
+@app.route('/character/create', methods=['POST'])
 def create_character():
     """Create a new character"""
     try:
         data = request.json
+        
+        # Support user_id from frontend
+        user_id = data.get('user_id', session.get('user_id', 'default'))
         
         # Required fields
         name = data.get('name')
@@ -371,12 +375,16 @@ def create_character():
         conn.commit()
         conn.close()
         
+        # Store in session
+        session['character_id'] = character_id
+        
         return jsonify({
+            'success': True,
             'message': 'Character created successfully',
             'character_id': character_id
         }), 201
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/character/<int:character_id>', methods=['GET'])
 def get_character(character_id):
@@ -487,18 +495,23 @@ def delete_character(character_id):
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+@app.route('/character/link', methods=['POST'])
 @app.route('/character/link-demiplane', methods=['POST'])
 def link_demiplane_character():
     """Link a Demiplane character"""
     try:
         data = request.json
-        url = data.get('url')
+        
+        # Support both frontend parameter names
+        url = data.get('demiplane_url') or data.get('url')
         name = data.get('name')
         clan = data.get('clan')
-        archetype = data.get('archetype', '')
+        predator_type = data.get('predator_type', '')
+        archetype = data.get('archetype', predator_type)
+        user_id = data.get('user_id', session.get('user_id', 'default'))
         
         if not url or not name or not clan:
-            return jsonify({'error': 'URL, name, and clan are required'}), 400
+            return jsonify({'success': False, 'error': 'URL, name, and clan are required'}), 400
         
         conn = sqlite3.connect('vtm_storyteller.db')
         c = conn.cursor()
@@ -512,12 +525,16 @@ def link_demiplane_character():
         conn.commit()
         conn.close()
         
+        # Store in session
+        session['character_id'] = character_id
+        
         return jsonify({
+            'success': True,
             'message': 'Demiplane character linked successfully',
             'character_id': character_id
         }), 201
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/rules/<rule_type>', methods=['GET'])
 def get_rules(rule_type):
