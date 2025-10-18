@@ -117,10 +117,10 @@ class PDFUploadHandler:
         parser = VTMCharacterParser(pdf_path)
         data = parser.parse()
         
-        # Get validation errors
-        errors = parser.get_validation_errors()
+        # Get warnings
+        warnings = parser._get_warnings()
         
-        return data, errors
+        return data, warnings
     
     def find_or_create_chronicle(self, chronicle_name):
         """
