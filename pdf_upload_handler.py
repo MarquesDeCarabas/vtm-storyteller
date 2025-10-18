@@ -56,7 +56,7 @@ class PDFUploadHandler:
             ('desire', 'TEXT'),
             ('sect', 'TEXT'),
             ('rank_title', 'TEXT'),
-            ('campaign_id', 'INTEGER')
+            ('chronicle_id', 'INTEGER')
         ]
         
         for column_name, column_type in columns_to_add:
@@ -180,7 +180,7 @@ class PDFUploadHandler:
         # Insert character
         c.execute('''
             INSERT INTO characters (
-                name, campaign_id, clan, concept,
+                name, chronicle_id, clan, concept,
                 attributes, skills, disciplines, backgrounds,
                 health_max, willpower_max, humanity, hunger, resonance,
                 blood_potency, generation,
