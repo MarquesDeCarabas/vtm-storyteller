@@ -711,21 +711,31 @@ def chat():
         
         # Check if user has an active character and inject context
         character_context = None
+        campaign_context = None
         try:
             # Import character integration functions
             import sys
             sys.path.append(os.path.dirname(__file__))
             from ai_character_integration import get_character_summary_for_chat
+            from campaign_ai_integration import integrate_with_chat_endpoint
             
             character_context = get_character_summary_for_chat(user_id)
+            
+            # Get campaign database context
+            campaign_integration = integrate_with_chat_endpoint(user_message, campaign_id=1)
+            campaign_context = campaign_integration['additional_context']
+            
         except Exception as char_error:
-            print(f"Could not load character context: {char_error}")
+            print(f"Could not load character/campaign context: {char_error}")
         
-        # Inject character context into user message if available
+        # Inject character and campaign context into user message if available
+        enhanced_message = user_message
         if character_context:
-            enhanced_message = f"{character_context}\n\nPlayer: {user_message}"
-        else:
-            enhanced_message = user_message
+            enhanced_message = f"{character_context}\n\n{enhanced_message}"
+        if campaign_context:
+            enhanced_message = f"{campaign_context}\n\n{enhanced_message}"
+        
+        enhanced_message = f"Player: {enhanced_message}"
         
         # Add user message with character context
         history.append({"role": "user", "content": enhanced_message})
@@ -746,6 +756,17 @@ def chat():
         
         # Add assistant response to history
         history.append({"role": "assistant", "content": assistant_message})
+        
+        # Auto-save any generated content to campaign database
+        try:
+            if campaign_integration:
+                saved_data = campaign_integration['process_response'](assistant_message)
+                if saved_data['saved_count'] > 0:
+                    print(f"📊 Auto-saved {saved_data['saved_count']} items to campaign database")
+                    for item_type, item_name, item_id in saved_data['saved_items']:
+                        print(f"   - {item_type}: {item_name} (ID: {item_id})")
+        except Exception as save_error:
+            print(f"Could not auto-save to campaign database: {save_error}")
         
         return jsonify({"response": assistant_message})
         
