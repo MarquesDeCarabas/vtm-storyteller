@@ -14,6 +14,51 @@ def migrate_database(db_path='vtm_storyteller.db'):
     conn = sqlite3.connect(db_path)
     c = conn.cursor()
     
+    # Check if characters table exists
+    c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='characters'")
+    table_exists = c.fetchone() is not None
+    
+    if not table_exists:
+        print("⚠️  Characters table does not exist. Creating it now...")
+        c.execute('''
+            CREATE TABLE characters (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT,
+                chronicle_id INTEGER,
+                clan TEXT,
+                concept TEXT,
+                attributes TEXT,
+                skills TEXT,
+                disciplines TEXT,
+                backgrounds TEXT,
+                health_max INTEGER DEFAULT 3,
+                willpower_max INTEGER DEFAULT 3,
+                humanity INTEGER DEFAULT 7,
+                hunger INTEGER DEFAULT 1,
+                resonance TEXT,
+                blood_potency INTEGER DEFAULT 0,
+                generation INTEGER DEFAULT 13,
+                blood_surge TEXT,
+                power_bonus TEXT,
+                mend_amount TEXT,
+                rouse_reroll TEXT,
+                bane_severity TEXT,
+                clan_bane TEXT,
+                clan_compulsion TEXT,
+                ambition TEXT,
+                desire TEXT,
+                sect TEXT,
+                rank_title TEXT,
+                pdf_path TEXT,
+                pdf_upload_date TIMESTAMP,
+                pdf_hash TEXT
+            )
+        ''')
+        conn.commit()
+        print("✅ Characters table created successfully")
+        conn.close()
+        return
+    
     # Get existing columns
     c.execute("PRAGMA table_info(characters)")
     existing_columns = {row[1] for row in c.fetchall()}
