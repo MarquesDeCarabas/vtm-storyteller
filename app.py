@@ -521,7 +521,7 @@ def create_character():
         conn.close()
         
         # Store in session
-        session['character_id'] = character_id
+        session['active_character_id'] = character_id
         
         return jsonify({
             'success': True,
@@ -687,7 +687,7 @@ def link_demiplane_character():
         conn.close()
         
         # Store in session
-        session['character_id'] = character_id
+        session['active_character_id'] = character_id
         
         return jsonify({
             'success': True,
