@@ -114,6 +114,18 @@ class IntelligentDiceSystem:
         }
         
         attr_key = attribute_map.get(attribute, attribute.lower())
+        
+        # First try to get from JSON attributes field (PDF upload system)
+        if 'attributes' in character_data and character_data['attributes']:
+            try:
+                import json
+                attributes = json.loads(character_data['attributes']) if isinstance(character_data['attributes'], str) else character_data['attributes']
+                if attr_key in attributes:
+                    return attributes[attr_key]
+            except:
+                pass
+        
+        # Fallback to individual column (legacy system)
         return character_data.get(attr_key, 0)
     
     def get_skill_value(self, character_data: Dict, skill: str) -> int:
@@ -158,6 +170,18 @@ class IntelligentDiceSystem:
         }
         
         skill_key = skill_map.get(skill, skill.lower())
+        
+        # First try to get from JSON skills field (PDF upload system)
+        if 'skills' in character_data and character_data['skills']:
+            try:
+                import json
+                skills = json.loads(character_data['skills']) if isinstance(character_data['skills'], str) else character_data['skills']
+                if skill_key in skills:
+                    return skills[skill_key]
+            except:
+                pass
+        
+        # Fallback to individual column (legacy system)
         return character_data.get(skill_key, 0)
     
     def calculate_dice_pool(self, character_data: Dict, roll_data: Dict) -> Tuple[int, str]:
