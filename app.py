@@ -22,6 +22,10 @@ import base64
 # Campaign and Session Management
 from campaign_session_api import *
 from command_system import command_system
+from intelligent_dice_system import IntelligentDiceSystem
+
+# Initialize intelligent dice system
+intelligent_dice = IntelligentDiceSystem()
 
 
 # ElevenLabs TTS Integration
@@ -859,7 +863,6 @@ def chat():
         
         # Detect and store suggested dice rolls from AI
         try:
-            from intelligent_dice_system import intelligent_dice
             roll_suggestion = intelligent_dice.extract_roll_from_ai_message(assistant_message)
             if roll_suggestion:
                 session_id = get_active_session_id() or 'default'
