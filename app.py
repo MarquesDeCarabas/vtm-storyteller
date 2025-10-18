@@ -2,6 +2,7 @@
 # Advanced features: Roll History, PDF Export, Roll20 API, Portraits, Chronicles, XP, Disciplines
 
 from flask import Flask, render_template_string, request, jsonify, send_file, session
+from datetime import timedelta
 from openai import OpenAI
 import os
 import sqlite3
@@ -99,6 +100,14 @@ def generate_speech(text, language='en', voice_settings=None):
 
 app = Flask(__name__)
 app.secret_key = secrets.token_hex(32)
+
+# Session configuration for persistence
+app.config['SESSION_TYPE'] = 'filesystem'
+app.config['SESSION_PERMANENT'] = True
+app.config['SESSION_USE_SIGNER'] = True
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+app.config['SESSION_COOKIE_SECURE'] = False  # Set to True in production with HTTPS
+app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(hours=24)
 
 # Configuration
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
@@ -423,6 +432,7 @@ def allowed_file(filename):
 
 @app.route('/')
 def index():
+    session.permanent = True  # Make session persistent across tabs
     return render_template_string(HTML_TEMPLATE)
 
 # Add these routes after line 273 (after the index route)
