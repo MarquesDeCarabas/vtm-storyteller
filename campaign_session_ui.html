@@ -1,0 +1,805 @@
+<!-- Campaign and Session Management UI Components -->
+<!-- This will be integrated into the main app.py HTML_TEMPLATE -->
+
+<style>
+/* Campaign Management Panel */
+.campaign-panel {
+    background: linear-gradient(135deg, #1a0000 0%, #2d0a0a 100%);
+    border: 2px solid #8B0000;
+    border-radius: 10px;
+    padding: 15px;
+    margin-bottom: 20px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.5);
+}
+
+.campaign-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 15px;
+}
+
+.campaign-title {
+    font-size: 18px;
+    font-weight: bold;
+    color: #FFD700;
+    text-shadow: 0 0 10px rgba(255, 215, 0, 0.5);
+}
+
+.campaign-selector {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+}
+
+.campaign-select {
+    background: #1a0000;
+    color: #FFD700;
+    border: 2px solid #8B0000;
+    border-radius: 5px;
+    padding: 8px 12px;
+    font-size: 14px;
+    cursor: pointer;
+    min-width: 200px;
+}
+
+.campaign-select:hover {
+    border-color: #FF0000;
+    box-shadow: 0 0 10px rgba(255, 0, 0, 0.3);
+}
+
+.btn-campaign {
+    background: linear-gradient(135deg, #8B0000 0%, #DC143C 100%);
+    color: white;
+    border: none;
+    border-radius: 5px;
+    padding: 8px 16px;
+    font-size: 14px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    font-weight: bold;
+}
+
+.btn-campaign:hover {
+    background: linear-gradient(135deg, #DC143C 0%, #FF0000 100%);
+    box-shadow: 0 0 15px rgba(220, 20, 60, 0.6);
+    transform: translateY(-2px);
+}
+
+.campaign-info {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 10px;
+    margin-top: 10px;
+}
+
+.info-item {
+    background: rgba(0, 0, 0, 0.3);
+    padding: 8px;
+    border-radius: 5px;
+    border-left: 3px solid #8B0000;
+}
+
+.info-label {
+    font-size: 11px;
+    color: #999;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.info-value {
+    font-size: 14px;
+    color: #FFD700;
+    font-weight: bold;
+    margin-top: 2px;
+}
+
+/* Session Controls */
+.session-controls {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    justify-content: center;
+    margin: 15px 0;
+}
+
+.btn-session-start {
+    background: linear-gradient(135deg, #006400 0%, #32CD32 100%);
+    color: white;
+    border: none;
+    border-radius: 5px;
+    padding: 10px 20px;
+    font-size: 16px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    font-weight: bold;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.btn-session-start:hover {
+    background: linear-gradient(135deg, #32CD32 0%, #00FF00 100%);
+    box-shadow: 0 0 20px rgba(50, 205, 50, 0.6);
+    transform: translateY(-2px);
+}
+
+.btn-session-end {
+    background: linear-gradient(135deg, #8B0000 0%, #DC143C 100%);
+    color: white;
+    border: none;
+    border-radius: 5px;
+    padding: 10px 20px;
+    font-size: 16px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    font-weight: bold;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.btn-session-end:hover {
+    background: linear-gradient(135deg, #DC143C 0%, #FF0000 100%);
+    box-shadow: 0 0 20px rgba(220, 20, 60, 0.6);
+    transform: translateY(-2px);
+}
+
+.btn-session-end:disabled,
+.btn-session-start:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none;
+}
+
+.session-status {
+    background: rgba(0, 0, 0, 0.3);
+    padding: 8px 16px;
+    border-radius: 5px;
+    border-left: 3px solid #FFD700;
+    font-size: 14px;
+    color: #FFD700;
+}
+
+.session-indicator {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    margin-right: 8px;
+    animation: pulse 2s infinite;
+}
+
+.session-indicator.active {
+    background: #32CD32;
+}
+
+.session-indicator.inactive {
+    background: #8B0000;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
+/* Commands Button */
+.btn-commands {
+    background: linear-gradient(135deg, #4B0082 0%, #8B008B 100%);
+    color: white;
+    border: none;
+    border-radius: 5px;
+    padding: 10px 20px;
+    font-size: 16px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    font-weight: bold;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.btn-commands:hover {
+    background: linear-gradient(135deg, #8B008B 0%, #DA70D6 100%);
+    box-shadow: 0 0 20px rgba(139, 0, 139, 0.6);
+    transform: translateY(-2px);
+}
+
+/* Commands Modal */
+.commands-modal {
+    display: none;
+    position: fixed;
+    z-index: 1000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.8);
+    backdrop-filter: blur(5px);
+}
+
+.commands-modal.show {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.commands-content {
+    background: linear-gradient(135deg, #1a0000 0%, #2d0a0a 100%);
+    border: 3px solid #8B0000;
+    border-radius: 15px;
+    padding: 30px;
+    max-width: 800px;
+    max-height: 80vh;
+    overflow-y: auto;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.9);
+}
+
+.commands-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    border-bottom: 2px solid #8B0000;
+    padding-bottom: 15px;
+}
+
+.commands-header h2 {
+    color: #FFD700;
+    font-size: 24px;
+    text-shadow: 0 0 10px rgba(255, 215, 0, 0.5);
+}
+
+.btn-close-modal {
+    background: #8B0000;
+    color: white;
+    border: none;
+    border-radius: 50%;
+    width: 30px;
+    height: 30px;
+    cursor: pointer;
+    font-size: 20px;
+    line-height: 1;
+    transition: all 0.3s ease;
+}
+
+.btn-close-modal:hover {
+    background: #DC143C;
+    transform: rotate(90deg);
+}
+
+.command-category {
+    margin-bottom: 25px;
+}
+
+.category-title {
+    color: #DC143C;
+    font-size: 18px;
+    font-weight: bold;
+    margin-bottom: 10px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.command-list {
+    list-style: none;
+    padding: 0;
+}
+
+.command-item {
+    background: rgba(0, 0, 0, 0.3);
+    padding: 12px;
+    margin-bottom: 8px;
+    border-radius: 5px;
+    border-left: 3px solid #8B0000;
+    transition: all 0.3s ease;
+}
+
+.command-item:hover {
+    border-left-color: #DC143C;
+    background: rgba(220, 20, 60, 0.1);
+    transform: translateX(5px);
+}
+
+.command-syntax {
+    color: #FFD700;
+    font-family: 'Courier New', monospace;
+    font-weight: bold;
+    font-size: 14px;
+}
+
+.command-description {
+    color: #CCC;
+    font-size: 13px;
+    margin-top: 5px;
+}
+
+.command-example {
+    color: #999;
+    font-family: 'Courier New', monospace;
+    font-size: 12px;
+    margin-top: 5px;
+    font-style: italic;
+}
+
+/* New Campaign Modal */
+.new-campaign-modal {
+    display: none;
+    position: fixed;
+    z-index: 1000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.8);
+    backdrop-filter: blur(5px);
+}
+
+.new-campaign-modal.show {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.new-campaign-content {
+    background: linear-gradient(135deg, #1a0000 0%, #2d0a0a 100%);
+    border: 3px solid #8B0000;
+    border-radius: 15px;
+    padding: 30px;
+    max-width: 500px;
+    width: 90%;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.9);
+}
+
+.form-group {
+    margin-bottom: 20px;
+}
+
+.form-group label {
+    display: block;
+    color: #FFD700;
+    font-size: 14px;
+    font-weight: bold;
+    margin-bottom: 8px;
+}
+
+.form-group input,
+.form-group select,
+.form-group textarea {
+    width: 100%;
+    background: #1a0000;
+    color: white;
+    border: 2px solid #8B0000;
+    border-radius: 5px;
+    padding: 10px;
+    font-size: 14px;
+}
+
+.form-group input:focus,
+.form-group select:focus,
+.form-group textarea:focus {
+    outline: none;
+    border-color: #DC143C;
+    box-shadow: 0 0 10px rgba(220, 20, 60, 0.3);
+}
+
+.form-actions {
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+    margin-top: 25px;
+}
+</style>
+
+<!-- Campaign Management Panel HTML -->
+<div class="campaign-panel">
+    <div class="campaign-header">
+        <div class="campaign-title">📖 Campaign Management</div>
+        <div class="campaign-selector">
+            <select id="campaignSelect" class="campaign-select">
+                <option value="">No Campaign Selected</option>
+            </select>
+            <button class="btn-campaign" onclick="showNewCampaignModal()">➕ New Campaign</button>
+            <button class="btn-commands" onclick="showCommandsModal()">📋 Commands</button>
+        </div>
+    </div>
+    
+    <div class="campaign-info" id="campaignInfo">
+        <div class="info-item">
+            <div class="info-label">Campaign</div>
+            <div class="info-value" id="campaignName">-</div>
+        </div>
+        <div class="info-item">
+            <div class="info-label">City</div>
+            <div class="info-value" id="campaignCity">-</div>
+        </div>
+        <div class="info-item">
+            <div class="info-label">Faction</div>
+            <div class="info-value" id="campaignFaction">-</div>
+        </div>
+        <div class="info-item">
+            <div class="info-label">Total Sessions</div>
+            <div class="info-value" id="totalSessions">0</div>
+        </div>
+    </div>
+    
+    <div class="session-controls">
+        <button class="btn-session-start" id="btnStartSession" onclick="startSession()">
+            ▶️ Start Session
+        </button>
+        <div class="session-status">
+            <span class="session-indicator inactive" id="sessionIndicator"></span>
+            <span id="sessionStatus">No active session</span>
+        </div>
+        <button class="btn-session-end" id="btnEndSession" onclick="endSession()" disabled>
+            ⏹️ End Session
+        </button>
+    </div>
+</div>
+
+<!-- Commands Modal -->
+<div class="commands-modal" id="commandsModal">
+    <div class="commands-content">
+        <div class="commands-header">
+            <h2>📋 Available Commands</h2>
+            <button class="btn-close-modal" onclick="closeCommandsModal()">×</button>
+        </div>
+        
+        <div class="command-category">
+            <div class="category-title">🎭 Campaign Commands</div>
+            <ul class="command-list">
+                <li class="command-item">
+                    <div class="command-syntax">/campaign new &lt;name&gt;</div>
+                    <div class="command-description">Create a new campaign</div>
+                    <div class="command-example">Example: /campaign new Chicago by Night</div>
+                </li>
+                <li class="command-item">
+                    <div class="command-syntax">/campaign load &lt;name&gt;</div>
+                    <div class="command-description">Load an existing campaign</div>
+                    <div class="command-example">Example: /campaign load Chicago by Night</div>
+                </li>
+                <li class="command-item">
+                    <div class="command-syntax">/campaign list</div>
+                    <div class="command-description">List all available campaigns</div>
+                </li>
+                <li class="command-item">
+                    <div class="command-syntax">/campaign info</div>
+                    <div class="command-description">Show detailed information about current campaign</div>
+                </li>
+            </ul>
+        </div>
+        
+        <div class="command-category">
+            <div class="category-title">🕐 Session Commands</div>
+            <ul class="command-list">
+                <li class="command-item">
+                    <div class="command-syntax">/session start</div>
+                    <div class="command-description">Start a new session in the current campaign</div>
+                </li>
+                <li class="command-item">
+                    <div class="command-syntax">/session end</div>
+                    <div class="command-description">End the current session and save progress</div>
+                </li>
+                <li class="command-item">
+                    <div class="command-syntax">/session summary</div>
+                    <div class="command-description">Generate a summary of the current session</div>
+                </li>
+            </ul>
+        </div>
+        
+        <div class="command-category">
+            <div class="category-title">👥 Database Commands</div>
+            <ul class="command-list">
+                <li class="command-item">
+                    <div class="command-syntax">/npc list</div>
+                    <div class="command-description">List all NPCs in the current campaign</div>
+                </li>
+                <li class="command-item">
+                    <div class="command-syntax">/npc search &lt;name&gt;</div>
+                    <div class="command-description">Search for a specific NPC</div>
+                    <div class="command-example">Example: /npc search Archivist</div>
+                </li>
+                <li class="command-item">
+                    <div class="command-syntax">/location list</div>
+                    <div class="command-description">List all locations in the current campaign</div>
+                </li>
+                <li class="command-item">
+                    <div class="command-syntax">/location search &lt;name&gt;</div>
+                    <div class="command-description">Search for a specific location</div>
+                    <div class="command-example">Example: /location search Hallowed Hall</div>
+                </li>
+                <li class="command-item">
+                    <div class="command-syntax">/item list</div>
+                    <div class="command-description">List all items in the current campaign</div>
+                </li>
+                <li class="command-item">
+                    <div class="command-syntax">/item search &lt;name&gt;</div>
+                    <div class="command-description">Search for a specific item</div>
+                    <div class="command-example">Example: /item search Crimson Fury</div>
+                </li>
+            </ul>
+        </div>
+        
+        <div class="command-category">
+            <div class="category-title">🎲 Dice Commands</div>
+            <ul class="command-list">
+                <li class="command-item">
+                    <div class="command-syntax">/roll &lt;pool&gt; &lt;hunger&gt;</div>
+                    <div class="command-description">Roll dice with specified pool and hunger</div>
+                    <div class="command-example">Example: /roll 6 2</div>
+                </li>
+                <li class="command-item">
+                    <div class="command-syntax">/roll &lt;attribute&gt;+&lt;skill&gt;</div>
+                    <div class="command-description">Roll using attribute + skill</div>
+                    <div class="command-example">Example: /roll dexterity+stealth</div>
+                </li>
+            </ul>
+        </div>
+        
+        <div class="command-category">
+            <div class="category-title">❓ Help Commands</div>
+            <ul class="command-list">
+                <li class="command-item">
+                    <div class="command-syntax">/help</div>
+                    <div class="command-description">Show this commands list</div>
+                </li>
+                <li class="command-item">
+                    <div class="command-syntax">/help &lt;command&gt;</div>
+                    <div class="command-description">Get detailed help for a specific command</div>
+                    <div class="command-example">Example: /help campaign</div>
+                </li>
+            </ul>
+        </div>
+    </div>
+</div>
+
+<!-- New Campaign Modal -->
+<div class="new-campaign-modal" id="newCampaignModal">
+    <div class="new-campaign-content">
+        <div class="commands-header">
+            <h2>➕ Create New Campaign</h2>
+            <button class="btn-close-modal" onclick="closeNewCampaignModal()">×</button>
+        </div>
+        
+        <form id="newCampaignForm" onsubmit="createCampaign(event)">
+            <div class="form-group">
+                <label for="newCampaignName">Campaign Name *</label>
+                <input type="text" id="newCampaignName" required placeholder="e.g., Chicago by Night">
+            </div>
+            
+            <div class="form-group">
+                <label for="newCampaignCity">City *</label>
+                <input type="text" id="newCampaignCity" required placeholder="e.g., Chicago, Vienna, Los Angeles">
+            </div>
+            
+            <div class="form-group">
+                <label for="newCampaignFaction">Primary Faction</label>
+                <select id="newCampaignFaction">
+                    <option value="">None / Mixed</option>
+                    <option value="Camarilla">Camarilla</option>
+                    <option value="Anarch">Anarch Movement</option>
+                    <option value="Independent">Independent</option>
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <label for="newCampaignDescription">Description</label>
+                <textarea id="newCampaignDescription" rows="4" placeholder="Brief description of your campaign..."></textarea>
+            </div>
+            
+            <div class="form-actions">
+                <button type="button" class="btn-campaign" onclick="closeNewCampaignModal()">Cancel</button>
+                <button type="submit" class="btn-campaign">Create Campaign</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+// Global state
+let currentCampaign = null;
+let currentSession = null;
+let sessionActive = false;
+
+// Load campaigns on page load
+window.addEventListener('DOMContentLoaded', () => {
+    loadCampaigns();
+});
+
+// Campaign Management Functions
+async function loadCampaigns() {
+    try {
+        const response = await fetch('/api/campaigns');
+        const campaigns = await response.json();
+        
+        const select = document.getElementById('campaignSelect');
+        select.innerHTML = '<option value="">No Campaign Selected</option>';
+        
+        campaigns.forEach(campaign => {
+            const option = document.createElement('option');
+            option.value = campaign.id;
+            option.textContent = campaign.name;
+            select.appendChild(option);
+        });
+        
+        // Load last active campaign from localStorage
+        const lastCampaignId = localStorage.getItem('lastCampaignId');
+        if (lastCampaignId) {
+            select.value = lastCampaignId;
+            loadCampaign(lastCampaignId);
+        }
+    } catch (error) {
+        console.error('Error loading campaigns:', error);
+    }
+}
+
+async function loadCampaign(campaignId) {
+    if (!campaignId) {
+        currentCampaign = null;
+        updateCampaignUI();
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/api/campaigns/${campaignId}`);
+        currentCampaign = await response.json();
+        localStorage.setItem('lastCampaignId', campaignId);
+        updateCampaignUI();
+    } catch (error) {
+        console.error('Error loading campaign:', error);
+    }
+}
+
+function updateCampaignUI() {
+    if (currentCampaign) {
+        document.getElementById('campaignName').textContent = currentCampaign.name;
+        document.getElementById('campaignCity').textContent = currentCampaign.city || '-';
+        document.getElementById('campaignFaction').textContent = currentCampaign.faction || '-';
+        document.getElementById('totalSessions').textContent = currentCampaign.total_sessions || 0;
+        document.getElementById('btnStartSession').disabled = false;
+    } else {
+        document.getElementById('campaignName').textContent = '-';
+        document.getElementById('campaignCity').textContent = '-';
+        document.getElementById('campaignFaction').textContent = '-';
+        document.getElementById('totalSessions').textContent = '0';
+        document.getElementById('btnStartSession').disabled = true;
+    }
+}
+
+// Session Management Functions
+async function startSession() {
+    if (!currentCampaign) {
+        alert('Please select or create a campaign first');
+        return;
+    }
+    
+    try {
+        const response = await fetch('/api/session/start', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({campaign_id: currentCampaign.id})
+        });
+        
+        currentSession = await response.json();
+        sessionActive = true;
+        updateSessionUI();
+        
+        // Send message to AI
+        await sendMessage(`/session start`);
+    } catch (error) {
+        console.error('Error starting session:', error);
+    }
+}
+
+async function endSession() {
+    if (!currentSession) return;
+    
+    try {
+        const response = await fetch('/api/session/end', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({session_id: currentSession.id})
+        });
+        
+        const result = await response.json();
+        sessionActive = false;
+        currentSession = null;
+        updateSessionUI();
+        
+        // Send message to AI for summary
+        await sendMessage(`/session end`);
+        
+        // Reload campaign to update session count
+        loadCampaign(currentCampaign.id);
+    } catch (error) {
+        console.error('Error ending session:', error);
+    }
+}
+
+function updateSessionUI() {
+    const indicator = document.getElementById('sessionIndicator');
+    const status = document.getElementById('sessionStatus');
+    const btnStart = document.getElementById('btnStartSession');
+    const btnEnd = document.getElementById('btnEndSession');
+    
+    if (sessionActive) {
+        indicator.className = 'session-indicator active';
+        status.textContent = `Session ${currentSession.session_number} active`;
+        btnStart.disabled = true;
+        btnEnd.disabled = false;
+    } else {
+        indicator.className = 'session-indicator inactive';
+        status.textContent = 'No active session';
+        btnStart.disabled = !currentCampaign;
+        btnEnd.disabled = true;
+    }
+}
+
+// Modal Functions
+function showCommandsModal() {
+    document.getElementById('commandsModal').classList.add('show');
+}
+
+function closeCommandsModal() {
+    document.getElementById('commandsModal').classList.remove('show');
+}
+
+function showNewCampaignModal() {
+    document.getElementById('newCampaignModal').classList.add('show');
+}
+
+function closeNewCampaignModal() {
+    document.getElementById('newCampaignModal').classList.remove('show');
+    document.getElementById('newCampaignForm').reset();
+}
+
+async function createCampaign(event) {
+    event.preventDefault();
+    
+    const campaignData = {
+        name: document.getElementById('newCampaignName').value,
+        city: document.getElementById('newCampaignCity').value,
+        faction: document.getElementById('newCampaignFaction').value,
+        description: document.getElementById('newCampaignDescription').value
+    };
+    
+    try {
+        const response = await fetch('/api/campaigns', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(campaignData)
+        });
+        
+        const newCampaign = await response.json();
+        closeNewCampaignModal();
+        
+        // Reload campaigns and select the new one
+        await loadCampaigns();
+        document.getElementById('campaignSelect').value = newCampaign.id;
+        loadCampaign(newCampaign.id);
+        
+        alert(`Campaign "${newCampaign.name}" created successfully!`);
+    } catch (error) {
+        console.error('Error creating campaign:', error);
+        alert('Error creating campaign. Please try again.');
+    }
+}
+
+// Campaign selector change handler
+document.addEventListener('DOMContentLoaded', () => {
+    document.getElementById('campaignSelect').addEventListener('change', (e) => {
+        loadCampaign(e.target.value);
+    });
+});
+
+// Close modals on outside click
+window.addEventListener('click', (e) => {
+    if (e.target.classList.contains('commands-modal')) {
+        closeCommandsModal();
+    }
+    if (e.target.classList.contains('new-campaign-modal')) {
+        closeNewCampaignModal();
+    }
+});
+</script>
+

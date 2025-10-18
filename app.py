@@ -19,6 +19,10 @@ import requests
 from werkzeug.utils import secure_filename
 import base64
 
+# Campaign and Session Management
+from campaign_session_api import *
+from command_system import command_system
+
 
 # ElevenLabs TTS Integration
 import io
@@ -705,6 +709,14 @@ def chat():
         data = request.json
         user_message = data.get('message', '')
         user_id = data.get('user_id', session.get('user_id', 'default'))
+        
+        # Check if message is a command
+        if command_system.is_command(user_message):
+            result = command_system.execute_command(user_message)
+            if 'error' in result:
+                return jsonify({'response': f"❌ Error: {result['error']}"})
+            else:
+                return jsonify({'response': result.get('message', 'Command executed successfully.')})
         
         # Get conversation history
         history = get_conversation_history(user_id)
@@ -2797,6 +2809,71 @@ def text_to_speech():
 def get_voices():
     return jsonify(VOICES)
 
+
+# ==================== CAMPAIGN AND SESSION API ROUTES ====================
+
+@app.route('/api/campaigns', methods=['GET'])
+def api_get_campaigns():
+    return get_all_campaigns()
+
+@app.route('/api/campaigns/<int:campaign_id>', methods=['GET'])
+def api_get_campaign(campaign_id):
+    return get_campaign(campaign_id)
+
+@app.route('/api/campaigns', methods=['POST'])
+def api_create_campaign():
+    return create_campaign()
+
+@app.route('/api/campaigns/<int:campaign_id>', methods=['PUT'])
+def api_update_campaign(campaign_id):
+    return update_campaign(campaign_id)
+
+@app.route('/api/campaigns/<int:campaign_id>', methods=['DELETE'])
+def api_delete_campaign(campaign_id):
+    return delete_campaign(campaign_id)
+
+@app.route('/api/session/start', methods=['POST'])
+def api_start_session():
+    return start_session()
+
+@app.route('/api/session/end', methods=['POST'])
+def api_end_session():
+    return end_session()
+
+@app.route('/api/session/<int:session_id>/summary', methods=['GET'])
+def api_session_summary(session_id):
+    return get_session_summary(session_id)
+
+@app.route('/api/campaigns/<int:campaign_id>/sessions', methods=['GET'])
+def api_campaign_sessions(campaign_id):
+    return get_campaign_sessions(campaign_id)
+
+@app.route('/api/campaigns/<int:campaign_id>/npcs', methods=['GET'])
+def api_list_npcs(campaign_id):
+    return list_campaign_npcs(campaign_id)
+
+@app.route('/api/campaigns/<int:campaign_id>/npcs/search', methods=['GET'])
+def api_search_npcs(campaign_id):
+    search_term = request.args.get('q', '')
+    return search_campaign_npcs(campaign_id, search_term)
+
+@app.route('/api/campaigns/<int:campaign_id>/locations', methods=['GET'])
+def api_list_locations(campaign_id):
+    return list_campaign_locations(campaign_id)
+
+@app.route('/api/campaigns/<int:campaign_id>/locations/search', methods=['GET'])
+def api_search_locations(campaign_id):
+    search_term = request.args.get('q', '')
+    return search_campaign_locations(campaign_id, search_term)
+
+@app.route('/api/campaigns/<int:campaign_id>/items', methods=['GET'])
+def api_list_items(campaign_id):
+    return list_campaign_items(campaign_id)
+
+@app.route('/api/campaigns/<int:campaign_id>/items/search', methods=['GET'])
+def api_search_items(campaign_id):
+    search_term = request.args.get('q', '')
+    return search_campaign_items(campaign_id, search_term)
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=8080, debug=False)
