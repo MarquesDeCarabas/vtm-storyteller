@@ -516,6 +516,22 @@ def link_demiplane_character():
         conn = sqlite3.connect('vtm_storyteller.db')
         c = conn.cursor()
         
+        # Ensure demiplane_url column exists
+        try:
+            c.execute("ALTER TABLE characters ADD COLUMN demiplane_url TEXT")
+            conn.commit()
+        except sqlite3.OperationalError:
+            # Column already exists
+            pass
+        
+        # Ensure backgrounds column exists
+        try:
+            c.execute("ALTER TABLE characters ADD COLUMN backgrounds TEXT DEFAULT '{}'")
+            conn.commit()
+        except sqlite3.OperationalError:
+            # Column already exists
+            pass
+        
         # Create a character entry with demiplane_url
         c.execute('''INSERT INTO characters 
                     (name, clan, concept, demiplane_url, attributes, skills, disciplines, backgrounds)
